@@ -510,7 +510,7 @@ index 7a5fc13a4ed6..75e96eebeff0 100644
  
  	/*
 diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
-index 2aa294e5bb5d..f471d9a3c9e6 100644
+index 2aa294e5bb5d..ecb3fbcbaa1d 100644
 --- a/bsd/kern/kern_exec.c
 +++ b/bsd/kern/kern_exec.c
 @@ -1005,6 +1005,9 @@ binary_match(cpu_type_t mask, cpu_type_t req_cpu,
@@ -844,7 +844,41 @@ index 2aa294e5bb5d..f471d9a3c9e6 100644
  	task_set_uniqueid(task);
  	set_security_token_task_internal(p, task);
  
-@@ -7031,6 +7245,11 @@ check_for_signature(proc_t p, struct image_params *imgp)
+@@ -6302,6 +6516,33 @@ create_unix_stack(vm_map_t map, load_result_t* load_result,
+ 		}
+ 
+ 		prot_addr = addr;
++
++		/*
++		 * cactus bring-up probe: the default user stack (USRSTACK64 =
++		 * 0x16FE00000) faults on the very first push with DFSC 3, i.e. the
++		 * pages below it are not mapped at all.  Everything above
++		 * (user_stack - RLIMIT_STACK) is supposed to stay readable, so if
++		 * RLIMIT_STACK is 0 the arithmetic below marks the *whole* 64 MB
++		 * MAXSSIZ region VM_PROT_NONE and nothing is left.  Print the
++		 * numbers once for init, and never protect the entire stack away.
++		 */
++		if (p->p_pid == 1) {
++			kprintf("xstk: %s us %llx addr %llx size %llx alloc %llx "
++			    "us_size(rlimit_stack) %llu prot_size %llx "
++			    "custom %d\n",
++			    p->p_comm,
++			    (unsigned long long)user_stack,
++			    (unsigned long long)addr,
++			    (unsigned long long)size,
++			    (unsigned long long)load_result->user_stack_alloc_size,
++			    (unsigned long long)load_result->user_stack_size,
++			    (unsigned long long)prot_size,
++			    load_result->custom_stack);
++		}
++		if (prot_size >= size) {
++			prot_size = 0;
++		}
++
+ 		kr = mach_vm_protect(map,
+ 		    prot_addr,
+ 		    prot_size,
+@@ -7031,6 +7272,11 @@ check_for_signature(proc_t p, struct image_params *imgp)
  	}
  
  done:
