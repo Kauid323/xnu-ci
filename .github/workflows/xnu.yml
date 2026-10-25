@@ -1,0 +1,113 @@
+name: xnu
+
+# Two jobs:
+#   rebase  - no toolchain needed: fetch the target XNU, apply the hackios patch with fuzz and
+#             report what still has to be ported by hand (the .rej files come back as artifacts).
+#   build   - the real thing: theos + Linux cctools + iPhoneOS SDK, then mach_kernel.
+#
+# The build job only makes sense once the patch applies cleanly; run it by hand
+# (Actions -> xnu -> Run workflow -> build=true) when that is the case.
+
+on:
+  push:
+    paths: ['patches/**', 'scripts/**', '.github/workflows/**']
+  workflow_dispatch:
+    inputs:
+      build:
+        description: 'also run the full kernel build'
+        type: boolean
+        default: false
+      xnu_tag:
+        description: 'XNU tag (iOS 15.3 = xnu-8020.140.41)'
+        default: 'xnu-8020.140.41'
+      sdk:
+        description: 'theos SDK directory name'
+        default: 'iPhoneOS15.6.sdk'
+
+env:
+  XNU_TAG: ${{ inputs.xnu_tag || 'xnu-8020.140.41' }}
+  XNU_SDK: ${{ inputs.sdk || 'iPhoneOS15.6.sdk' }}
+  PATCH: patches/hackios-8796.patch
+
+jobs:
+  rebase:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: fetch ${{ env.XNU_TAG }}
+        run: |
+          set -eux
+          curl -sSL -o xnu.tar.gz "https://codeload.github.com/apple-oss-distributions/xnu/tar.gz/refs/tags/${XNU_TAG}"
+          tar xzf xnu.tar.gz
+          mv "xnu-${XNU_TAG}" src || mv xnu-* src
+          cd src && git init -q . && git add -A && git -c user.email=ci@local -c user.name=ci commit -qm vanilla
+
+      - name: apply with fuzz, collect what is left
+        run: |
+          cd src
+          set +e
+          patch -p1 -F3 --no-backup-if-mismatch < "../${PATCH}" > ../apply.log 2>&1
+          echo "exit=$?" >> ../apply.log
+          grep -c 'FAILED' ../apply.log || true
+          find . -name '*.rej' | sort > ../rejects.txt
+          wc -l < ../rejects.txt
+          exit 0
+
+      - name: summary
+        run: |
+          {
+            echo "### rebase report for ${XNU_TAG}"
+            echo
+            echo '```'
+            grep -E 'FAILED|succeeded at' apply.log | head -60
+            echo '```'
+            echo
+            echo "**files with rejects**"
+            echo '```'
+            cat rejects.txt
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rebase-report
+          path: |
+            apply.log
+            rejects.txt
+            src/**/*.rej
+
+  build:
+    if: ${{ inputs.build == true }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: host packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            git curl tar xz-utils make clang lld flex bison m4 perl python3 \
+            autoconf automake libssl-dev libelf-dev zlib1g-dev pkg-config
+
+      - name: theos (Linux cctools + SDK)
+        run: ./scripts/setup-theos.sh "$XNU_SDK"
+
+      - name: hackios (xnu-deps + build script)
+        run: git clone --depth 1 https://github.com/oosexgang/hackios-xnu-kernel.git hackios
+
+      - name: xnu source
+        run: ./scripts/fetch-xnu.sh "$XNU_TAG" "$PATCH"
+
+      - name: xnu-deps
+        run: ./scripts/deps.sh
+
+      - name: build
+        run: ./scripts/build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mach-kernel
+          path: out/
+          if-no-files-found: error
