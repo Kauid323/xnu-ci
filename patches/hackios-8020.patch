@@ -1009,7 +1009,7 @@ index 5cd3bea3edf0..8dcc443c1b84 100644
  	if (sock == NULL) {
  		return EINVAL;
 diff --git a/bsd/kern/sys_generic.c b/bsd/kern/sys_generic.c
-index 6b477174455a..919577e9e14d 100644
+index 6b477174455a..9d14e0878f6a 100644
 --- a/bsd/kern/sys_generic.c
 +++ b/bsd/kern/sys_generic.c
 @@ -365,7 +365,7 @@ dofileread(vfs_context_t ctx, struct fileproc *fp,
@@ -1021,7 +1021,30 @@ index 6b477174455a..919577e9e14d 100644
  
  	if (nbyte > INT_MAX) {
  		return EINVAL;
-@@ -620,7 +620,7 @@ dofilewrite(vfs_context_t ctx, struct fileproc *fp,
+@@ -530,6 +530,22 @@ write_nocancel(struct proc *p, struct write_nocancel_args *uap, user_ssize_t *re
+ 		struct vfs_context context = *(vfs_context_current());
+ 		context.vc_ucred = fp->fp_glob->fg_cred;
+ 
++		/*
++		 * cactus bring-up: this device never lights the screen, so pid 1's
++		 * console output is invisible.  systrace only records the pointer
++		 * and the length, which tells us a string was printed but not what
++		 * it said.  Echo the bytes into the kernel log instead; the loader
++		 * copies that log out to pstore after the kernel returns.
++		 * Remove once a real userland has a working console.
++		 */
++		if (p->p_pid == 1 && fd == 1 && uap->nbyte > 0 && uap->nbyte < 256) {
++			char p1buf[256];
++
++			if (copyin(uap->cbuf, p1buf, uap->nbyte) == 0) {
++				kprintf("p1out: %.*s\n", (int)uap->nbyte, p1buf);
++			}
++		}
++
+ 		error = dofilewrite(&context, fp, uap->cbuf, uap->nbyte,
+ 		    (off_t)-1, 0, retval);
+ 	}
+@@ -620,7 +636,7 @@ dofilewrite(vfs_context_t ctx, struct fileproc *fp,
  	uio_t auio;
  	int error = 0;
  	user_ssize_t bytecnt;
