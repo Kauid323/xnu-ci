@@ -1010,7 +1010,7 @@ index 5cd3bea3edf0..8dcc443c1b84 100644
  	if (sock == NULL) {
  		return EINVAL;
 diff --git a/bsd/kern/sys_generic.c b/bsd/kern/sys_generic.c
-index 6b477174455a..a7b6a6b600be 100644
+index 6b477174455a..044650a22216 100644
 --- a/bsd/kern/sys_generic.c
 +++ b/bsd/kern/sys_generic.c
 @@ -162,6 +162,13 @@
@@ -1036,7 +1036,7 @@ index 6b477174455a..a7b6a6b600be 100644
  
  	if (nbyte > INT_MAX) {
  		return EINVAL;
-@@ -530,6 +537,22 @@ write_nocancel(struct proc *p, struct write_nocancel_args *uap, user_ssize_t *re
+@@ -530,6 +537,39 @@ write_nocancel(struct proc *p, struct write_nocancel_args *uap, user_ssize_t *re
  		struct vfs_context context = *(vfs_context_current());
  		context.vc_ucred = fp->fp_glob->fg_cred;
  
@@ -1047,19 +1047,36 @@ index 6b477174455a..a7b6a6b600be 100644
 +		 * it said.  Echo the bytes into the kernel log instead; the loader
 +		 * copies that log out to pstore after the kernel returns.
 +		 * Remove once a real userland has a working console.
++		 *
++		 * The first version printed nothing at all, so this one says which
++		 * half failed: "p1w: armed" proves the condition matched, "p1w: cr"
++		 * gives copyin's result, and only then is the text printed.
 +		 */
-+		if (p->p_pid == 1 && fd == 1 && uap->nbyte > 0 && uap->nbyte < 256) {
-+			char p1buf[256];
++		if (p->p_pid == 1 && fd == 1) {
++			static int p1_echo;
 +
-+			if (copyin(uap->cbuf, p1buf, uap->nbyte) == 0) {
-+				kprintf("p1out: %.*s\n", (int)uap->nbyte, p1buf);
++			if (p1_echo == 0) {
++				kprintf("p1w: armed, n %d cbuf %llx\n",
++				    (int)uap->nbyte, uap->cbuf);
++			}
++			if (uap->nbyte > 0 && uap->nbyte < 256) {
++				char p1buf[256];
++				int cr;
++
++				p1_echo++;
++				cr = copyin(uap->cbuf, p1buf, (size_t)uap->nbyte);
++				kprintf("p1w: cr %d n %d\n", cr, (int)uap->nbyte);
++				if (cr == 0) {
++					p1buf[uap->nbyte] = '\0';
++					kprintf("p1out: %s\n", p1buf);
++				}
 +			}
 +		}
 +
  		error = dofilewrite(&context, fp, uap->cbuf, uap->nbyte,
  		    (off_t)-1, 0, retval);
  	}
-@@ -620,7 +643,7 @@ dofilewrite(vfs_context_t ctx, struct fileproc *fp,
+@@ -620,7 +660,7 @@ dofilewrite(vfs_context_t ctx, struct fileproc *fp,
  	uio_t auio;
  	int error = 0;
  	user_ssize_t bytecnt;
