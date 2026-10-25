@@ -6625,10 +6625,33 @@ index ac56edb0ca6f..0a292914795d 100644
  #endif /* CONFIG_SCHED_AUTO_JOIN */
  
 diff --git a/osfmk/kern/zalloc.c b/osfmk/kern/zalloc.c
-index 97acb9c06cde..ca5c46dd33c0 100644
+index 97acb9c06cde..14c8d53ab496 100644
 --- a/osfmk/kern/zalloc.c
 +++ b/osfmk/kern/zalloc.c
-@@ -4762,6 +4762,10 @@ zone_expand_locked(zone_t z, zalloc_flags_t flags, bool (*pred)(zone_t))
+@@ -3989,6 +3989,22 @@ zcram_and_lock(zone_t zone, vm_offset_t addr, uint32_t pg_va_new,
+ 		if (!zone->z_permanent) {
+ 			zone_meta_bits_init(meta, free_end, zone->z_chunk_elems);
+ 		}
++		/*
++		 * (cactus bring-up) a chunk that spans several pages is where the element
++		 * index and the bitmap can disagree; record the geometry once per chunk.
++		 */
++		if (__improbable(chunk_pages > 1 && zone->z_chunk_elems > 32)) {
++			static int zzb_n;
++			if (zzb_n < 8) {
++				zzb_n++;
++				kprintf("zzb: %s %p free_end %u clen %u pg_end %u esize %u elems %u "
++				    "inline %u | m0 %08x m1 %08x\n",
++				    zone->z_name, (void *)addr, free_end, (unsigned)chunk_len,
++				    (unsigned)pg_end, (unsigned)elem_size,
++				    (unsigned)zone->z_chunk_elems, (unsigned)inline_bitmap,
++				    meta[0].zm_bitmap, meta[1].zm_bitmap);
++			}
++		}
+ 	} else {
+ 		assert(!zone->z_percpu && !zone->z_permanent);
+ 
+@@ -4762,6 +4778,10 @@ zone_expand_locked(zone_t z, zalloc_flags_t flags, bool (*pred)(zone_t))
  
  			if (pages >= min_pages &&
  			    !zone_expand_wait_for_pages(waited)) {
@@ -6639,7 +6662,33 @@ index 97acb9c06cde..ca5c46dd33c0 100644
  				break;
  			}
  
-@@ -6196,6 +6200,23 @@ zalloc_return(zone_t zone, zone_element_t ze, zalloc_flags_t flags __unused,
+@@ -6154,6 +6174,25 @@ zalloc_import(zone_t zone, zone_element_t *elems, zalloc_flags_t flags,
+ 
+ 		do {
+ 			eidx = zone_meta_find_and_clear_bit(zone, meta, flags);
++			/*
++			 * (cactus bring-up) the scan must never hand out an index past the last
++			 * element of the chunk; when it does, dump what the bitmap looked like.
++			 */
++			if (__improbable(eidx >= zone->z_chunk_elems)) {
++				kprintf("zzi: %s %p eidx %u rr %u elems %u pages %u esize %u "
++				    "clen %u pidx %u inline %u asize %u | "
++				    "m0 %08x/%u m1 %08x/%u m2 %08x/%u m3 %08x/%u\n",
++				    zone->z_name, (void *)page, (unsigned)eidx,
++				    (unsigned)zpercpu_get(zone->z_stats)->zs_alloc_rr,
++				    (unsigned)zone->z_chunk_elems, (unsigned)zone->z_chunk_pages,
++				    (unsigned)esize, (unsigned)meta->zm_chunk_len,
++				    (unsigned)meta->zm_page_index, (unsigned)meta->zm_inline_bitmap,
++				    (unsigned)meta->zm_alloc_size,
++				    meta[0].zm_bitmap, (unsigned)meta[0].zm_chunk_len,
++				    meta[1].zm_bitmap, (unsigned)meta[1].zm_chunk_len,
++				    meta[2].zm_bitmap, (unsigned)meta[2].zm_chunk_len,
++				    meta[3].zm_bitmap, (unsigned)meta[3].zm_chunk_len);
++			}
+ 			elems[i++] = zone_element_encode(page, eidx);
+ 			size += esize;
+ 		} while (i < n && old_size + size + esize <= max_size);
+@@ -6196,6 +6235,23 @@ zalloc_return(zone_t zone, zone_element_t ze, zalloc_flags_t flags __unused,
  	addr = kasan_tbi_fix_address_tag(addr);
  #endif /* CONFIG_KERNEL_TBI && KASAN_TBI */
  #if ZALLOC_ENABLE_ZERO_CHECK
