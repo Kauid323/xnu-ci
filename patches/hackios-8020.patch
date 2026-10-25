@@ -1009,10 +1009,24 @@ index 5cd3bea3edf0..8dcc443c1b84 100644
  	if (sock == NULL) {
  		return EINVAL;
 diff --git a/bsd/kern/sys_generic.c b/bsd/kern/sys_generic.c
-index 6b477174455a..9d14e0878f6a 100644
+index 6b477174455a..a7b6a6b600be 100644
 --- a/bsd/kern/sys_generic.c
 +++ b/bsd/kern/sys_generic.c
-@@ -365,7 +365,7 @@ dofileread(vfs_context_t ctx, struct fileproc *fp,
+@@ -162,6 +162,13 @@
+ 
+ /* for entitlement check */
+ #include <IOKit/IOBSD.h>
++
++/*
++ * kprintf is only declared near the bottom of this file, inside a
++ * DEVELOPMENT || DEBUG block, so the pid 1 console echo in write_nocancel()
++ * would otherwise hit an implicit declaration first.
++ */
++#include <pexpert/pexpert.h>
+ /*
+  * If you need accounting for KM_SELECT consider using
+  * KALLOC_HEAP_DEFINE to define a view.
+@@ -365,7 +372,7 @@ dofileread(vfs_context_t ctx, struct fileproc *fp,
  	uio_t auio;
  	user_ssize_t bytecnt;
  	int error = 0;
@@ -1021,7 +1035,7 @@ index 6b477174455a..9d14e0878f6a 100644
  
  	if (nbyte > INT_MAX) {
  		return EINVAL;
-@@ -530,6 +530,22 @@ write_nocancel(struct proc *p, struct write_nocancel_args *uap, user_ssize_t *re
+@@ -530,6 +537,22 @@ write_nocancel(struct proc *p, struct write_nocancel_args *uap, user_ssize_t *re
  		struct vfs_context context = *(vfs_context_current());
  		context.vc_ucred = fp->fp_glob->fg_cred;
  
@@ -1044,7 +1058,7 @@ index 6b477174455a..9d14e0878f6a 100644
  		error = dofilewrite(&context, fp, uap->cbuf, uap->nbyte,
  		    (off_t)-1, 0, retval);
  	}
-@@ -620,7 +636,7 @@ dofilewrite(vfs_context_t ctx, struct fileproc *fp,
+@@ -620,7 +643,7 @@ dofilewrite(vfs_context_t ctx, struct fileproc *fp,
  	uio_t auio;
  	int error = 0;
  	user_ssize_t bytecnt;
