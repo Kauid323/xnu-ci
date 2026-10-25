@@ -1010,24 +1010,10 @@ index 5cd3bea3edf0..8dcc443c1b84 100644
  	if (sock == NULL) {
  		return EINVAL;
 diff --git a/bsd/kern/sys_generic.c b/bsd/kern/sys_generic.c
-index 6b477174455a..044650a22216 100644
+index 6b477174455a..81b9305af086 100644
 --- a/bsd/kern/sys_generic.c
 +++ b/bsd/kern/sys_generic.c
-@@ -162,6 +162,13 @@
- 
- /* for entitlement check */
- #include <IOKit/IOBSD.h>
-+
-+/*
-+ * kprintf is only declared near the bottom of this file, inside a
-+ * DEVELOPMENT || DEBUG block, so the pid 1 console echo in write_nocancel()
-+ * would otherwise hit an implicit declaration first.
-+ */
-+#include <pexpert/pexpert.h>
- /*
-  * If you need accounting for KM_SELECT consider using
-  * KALLOC_HEAP_DEFINE to define a view.
-@@ -365,7 +372,7 @@ dofileread(vfs_context_t ctx, struct fileproc *fp,
+@@ -365,7 +365,7 @@ dofileread(vfs_context_t ctx, struct fileproc *fp,
  	uio_t auio;
  	user_ssize_t bytecnt;
  	int error = 0;
@@ -1036,7 +1022,7 @@ index 6b477174455a..044650a22216 100644
  
  	if (nbyte > INT_MAX) {
  		return EINVAL;
-@@ -530,6 +537,39 @@ write_nocancel(struct proc *p, struct write_nocancel_args *uap, user_ssize_t *re
+@@ -530,6 +530,40 @@ write_nocancel(struct proc *p, struct write_nocancel_args *uap, user_ssize_t *re
  		struct vfs_context context = *(vfs_context_current());
  		context.vc_ucred = fp->fp_glob->fg_cred;
  
@@ -1048,15 +1034,16 @@ index 6b477174455a..044650a22216 100644
 +		 * copies that log out to pstore after the kernel returns.
 +		 * Remove once a real userland has a working console.
 +		 *
-+		 * The first version printed nothing at all, so this one says which
-+		 * half failed: "p1w: armed" proves the condition matched, "p1w: cr"
-+		 * gives copyin's result, and only then is the text printed.
++		 * printf, not kprintf: kprintf's output never reached the log here
++		 * (the PE console path is wired elsewhere on this port), while every
++		 * printf in the tree does.  "p1w: armed" proves the condition
++		 * matched, "p1w: cr" gives copyin's result, and only then the text.
 +		 */
 +		if (p->p_pid == 1 && fd == 1) {
 +			static int p1_echo;
 +
 +			if (p1_echo == 0) {
-+				kprintf("p1w: armed, n %d cbuf %llx\n",
++				printf("p1w: armed, n %d cbuf %llx\n",
 +				    (int)uap->nbyte, uap->cbuf);
 +			}
 +			if (uap->nbyte > 0 && uap->nbyte < 256) {
@@ -1065,10 +1052,10 @@ index 6b477174455a..044650a22216 100644
 +
 +				p1_echo++;
 +				cr = copyin(uap->cbuf, p1buf, (size_t)uap->nbyte);
-+				kprintf("p1w: cr %d n %d\n", cr, (int)uap->nbyte);
++				printf("p1w: cr %d n %d\n", cr, (int)uap->nbyte);
 +				if (cr == 0) {
 +					p1buf[uap->nbyte] = '\0';
-+					kprintf("p1out: %s\n", p1buf);
++					printf("p1out: %s\n", p1buf);
 +				}
 +			}
 +		}
@@ -1076,7 +1063,7 @@ index 6b477174455a..044650a22216 100644
  		error = dofilewrite(&context, fp, uap->cbuf, uap->nbyte,
  		    (off_t)-1, 0, retval);
  	}
-@@ -620,7 +660,7 @@ dofilewrite(vfs_context_t ctx, struct fileproc *fp,
+@@ -620,7 +654,7 @@ dofilewrite(vfs_context_t ctx, struct fileproc *fp,
  	uio_t auio;
  	int error = 0;
  	user_ssize_t bytecnt;
