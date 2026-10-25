@@ -1,3 +1,105 @@
+diff --git a/EXTERNAL_HEADERS/corecrypto/cc_priv.h b/EXTERNAL_HEADERS/corecrypto/cc_priv.h
+index 544813f..ff6391d 100644
+--- a/EXTERNAL_HEADERS/corecrypto/cc_priv.h
++++ b/EXTERNAL_HEADERS/corecrypto/cc_priv.h
+@@ -224,6 +224,97 @@ x = (((uint64_t)(((const unsigned char *)(y))[0] & 255))<<56) |           \
+ 
+ #endif
+ 
++// MARK: - Loads and Store
++//
++// (redwood) 8796 has this block in cc_priv.h and 8020 does not, so osfmk/minicrypto/
++// mc_digests.c ends up calling cc_load32_be() and friends without a declaration and the
++// kernel does not link (no libcorecrypto in this build -- minicrypto replaces it).
++// Written without 8796's cc_sized_by() annotations, which 8020's cc_config.h lacks.
++
++CC_INLINE void cc_store16_be(uint16_t x, uint8_t *y)
++{
++    y[0] = (uint8_t)(x >> 8);
++    y[1] = (uint8_t)(x);
++}
++CC_INLINE uint16_t cc_load16_be(const uint8_t *y)
++{
++    return (uint16_t)(((uint16_t)(y[0]) << 8) | ((uint16_t)(y[1])));
++}
++
++CC_INLINE void cc_store16_le(uint16_t x, uint8_t *y)
++{
++    y[0] = (uint8_t)(x);
++    y[1] = (uint8_t)(x >> 8);
++}
++CC_INLINE uint16_t cc_load16_le(const uint8_t *y)
++{
++    return (uint16_t)(((uint16_t)(y[1]) << 8) | ((uint16_t)(y[0])));
++}
++
++CC_INLINE void cc_store32_be(uint32_t x, uint8_t *y)
++{
++    y[0] = (uint8_t)(x >> 24);
++    y[1] = (uint8_t)(x >> 16);
++    y[2] = (uint8_t)(x >> 8);
++    y[3] = (uint8_t)(x);
++}
++CC_INLINE uint32_t cc_load32_be(const uint8_t *y)
++{
++    return (((uint32_t)(y[0])) << 24) | (((uint32_t)(y[1])) << 16) |
++           (((uint32_t)(y[2])) << 8) | ((uint32_t)(y[3]));
++}
++
++CC_INLINE void cc_store32_le(uint32_t x, uint8_t *y)
++{
++    y[0] = (uint8_t)(x);
++    y[1] = (uint8_t)(x >> 8);
++    y[2] = (uint8_t)(x >> 16);
++    y[3] = (uint8_t)(x >> 24);
++}
++CC_INLINE uint32_t cc_load32_le(const uint8_t *y)
++{
++    return (((uint32_t)(y[3])) << 24) | (((uint32_t)(y[2])) << 16) |
++           (((uint32_t)(y[1])) << 8) | ((uint32_t)(y[0]));
++}
++
++CC_INLINE void cc_store64_be(uint64_t x, uint8_t *y)
++{
++    y[0] = (uint8_t)(x >> 56);
++    y[1] = (uint8_t)(x >> 48);
++    y[2] = (uint8_t)(x >> 40);
++    y[3] = (uint8_t)(x >> 32);
++    y[4] = (uint8_t)(x >> 24);
++    y[5] = (uint8_t)(x >> 16);
++    y[6] = (uint8_t)(x >> 8);
++    y[7] = (uint8_t)(x);
++}
++CC_INLINE uint64_t cc_load64_be(const uint8_t *y)
++{
++    return (((uint64_t)(y[0])) << 56) | (((uint64_t)(y[1])) << 48) |
++           (((uint64_t)(y[2])) << 40) | (((uint64_t)(y[3])) << 32) |
++           (((uint64_t)(y[4])) << 24) | (((uint64_t)(y[5])) << 16) |
++           (((uint64_t)(y[6])) << 8) | ((uint64_t)(y[7]));
++}
++
++CC_INLINE void cc_store64_le(uint64_t x, uint8_t *y)
++{
++    y[0] = (uint8_t)(x);
++    y[1] = (uint8_t)(x >> 8);
++    y[2] = (uint8_t)(x >> 16);
++    y[3] = (uint8_t)(x >> 24);
++    y[4] = (uint8_t)(x >> 32);
++    y[5] = (uint8_t)(x >> 40);
++    y[6] = (uint8_t)(x >> 48);
++    y[7] = (uint8_t)(x >> 56);
++}
++CC_INLINE uint64_t cc_load64_le(const uint8_t *y)
++{
++    return (((uint64_t)(y[7])) << 56) | (((uint64_t)(y[6])) << 48) |
++           (((uint64_t)(y[5])) << 40) | (((uint64_t)(y[4])) << 32) |
++           (((uint64_t)(y[3])) << 24) | (((uint64_t)(y[2])) << 16) |
++           (((uint64_t)(y[1])) << 8) | ((uint64_t)(y[0]));
++}
++
+ // MARK: - 32-bit Rotates
+ 
+ #if defined(_MSC_VER)
 diff --git a/Makefile b/Makefile
 index e78d847..03fc3ff 100644
 --- a/Makefile
@@ -2336,7 +2438,7 @@ index 68df6da..6c4c594 100644
  #endif
  
 diff --git a/osfmk/arm64/machine_routines.c b/osfmk/arm64/machine_routines.c
-index 669cdfc..988b39b 100644
+index 669cdfc..5d1a231 100644
 --- a/osfmk/arm64/machine_routines.c
 +++ b/osfmk/arm64/machine_routines.c
 @@ -712,6 +712,9 @@ ml_get_machine_mem(void)
@@ -2523,7 +2625,30 @@ index 669cdfc..988b39b 100644
  
  	*processor_out = processor;
  	*ipi_handler_out = cpu_signal_handler;
-@@ -2106,8 +2220,16 @@ _enable_virtual_timer(void)
+@@ -1461,6 +1575,22 @@ ml_io_map_wcomb(
+ 	return io_map(phys_addr, size, VM_WIMG_WCOMB);
+ }
+ 
++/*
++ * (redwood) 8796 added this: map IO space with the caller's wimg flags and never through
++ * the static (block) mapping. 8020's io_map() has no "unmappable" argument, and the block
++ * mapping it would skip does not exist on this platform, so the closest thing is
++ * io_map_with_prot() with default protections. The redwood drivers (ufs, ufshc, wifi,
++ * camera) call it for registers that must not be re-mapped behind their back.
++ */
++vm_offset_t
++ml_io_map_unmappable(
++	vm_offset_t phys_addr,
++	vm_size_t size,
++	unsigned int flags)
++{
++	return io_map_with_prot(phys_addr, size, flags, VM_PROT_DEFAULT);
++}
++
+ void
+ ml_io_unmap(vm_offset_t addr, vm_size_t sz)
+ {
+@@ -2106,8 +2236,16 @@ _enable_virtual_timer(void)
  	uint64_t cntvctl = CNTV_CTL_EL0_ENABLE; /* One wants to use 32 bits, but "mrs" prefers it this way */
  
  	__builtin_arm_wsr64("CNTV_CTL_EL0", cntvctl);
@@ -6412,10 +6537,10 @@ index 09cbd0c..c677e8b 100644
  
  #if CONFIG_DTRACE
 diff --git a/osfmk/kern/thread.c b/osfmk/kern/thread.c
-index 3fb1bfa..ccc47e1 100644
+index 3fb1bfa..5b7253f 100644
 --- a/osfmk/kern/thread.c
 +++ b/osfmk/kern/thread.c
-@@ -2933,6 +2933,26 @@ thread_get_tag(thread_t th)
+@@ -2933,6 +2933,28 @@ thread_get_tag(thread_t th)
  	return thread_get_tag_internal(th);
  }
  
@@ -6435,7 +6560,9 @@ index 3fb1bfa..ccc47e1 100644
 +	uint64_t now = mach_absolute_time();
 +
 +	*runnable = thread->runnable_timer.all_bits + (now - thread->runnable_timer.tstamp);
-+	*run = recount_current_thread_time_mach();
++	/* (redwood) 8796 asked recount for this; 8020 has no recount, and the same number is
++	 * the two mode timers grabbed at "now" (see perfcontrol's use in sched_prim.c). */
++	*run = timer_grab(&thread->user_timer) + timer_grab(&thread->system_timer);
 +	ml_set_interrupts_enabled(istate);
 +}
 +

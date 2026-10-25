@@ -2,13 +2,13 @@
 
 `patches/hackios-8020.patch` is the redwood work rebased from `xnu-8796.121.2` (iOS 16.5) onto
 `xnu-8020.140.41` (iOS 15.3). It applies to a pristine tag with **no fuzz and no rejects**
-(`patch -F0`, 75 files, 191 hunks).
+(`patch -F0`, 76 files, 193 hunks).
 
 The redwood work is two halves, exactly as in `hackios/xnu/apply.sh`:
 
 | | what | where |
 |---|---|---|
-| changes to Apple's files | 191 hunks in 75 files | `patches/hackios-8020.patch` |
+| changes to Apple's files | 193 hunks in 76 files | `patches/hackios-8020.patch` |
 | files Apple's tree does not have | 104 files | `hackios/xnu/files/` (copied by `scripts/fetch-xnu.sh`) |
 
 The patch does **not** carry the 104 new files. `scripts/fetch-xnu.sh` copies them from the
@@ -91,6 +91,20 @@ Rule of thumb: whole-file rewrites go in `overrides/`, small edits to files that
 go in `patches/redwood-8020.patch` (applied after the copy), everything else goes in the main
 patch, which is regenerated from the working tree with
 `git -c core.autocrlf=false diff > patches/hackios-8020.patch`.
+
+## What the linker said (symbols 8020 does not define for a from-scratch arm64 build)
+
+Compilation finishes; the kernel then failed to link with exactly seven undefined symbols. None
+of them is redwood's mistake — they are all places where 8020's published source assumes a closed
+piece of the platform (the PPL monitor, libcorecrypto) or where iOS 16 moved code into a header.
+
+| symbol | referenced from | why 8020 has no definition | fix |
+|---|---|---|---|
+| `cc_load32_be`, `cc_load32_le`, `cc_load64_be`, `cc_store32_le`, `cc_store64_be` | `mc_digests.o` | 8796 put these helpers in `EXTERNAL_HEADERS/corecrypto/cc_priv.h` as `CC_INLINE`; 8020's copy has no load/store block at all, so the calls were implicit declarations and nothing was inlined | the block is **restored in `cc_priv.h`** (all sizes, both endiannesses, without 8796's `cc_sized_by` annotations that 8020's `cc_config.h` lacks) |
+| `ml_io_map_unmappable` | `redwood_ufs.o`, `redwood_ufshc.o`, `redwood_camera.o`, `redwood_wifi.o`, … | iOS 16 added it to `osfmk/arm64/machine_routines.c` (and a fifth `unmappable` argument to `io_map()`); 8020 has neither | added next to `ml_io_map_wcomb()` as `io_map_with_prot(pa, size, flags, VM_PROT_DEFAULT)` — the block mapping it would skip does not exist here |
+| `pmap_cs_allow_invalid`, `pmap_cs_fork_prepare` | `vm_map.o` | `osfmk/arm/pmap/pmap_cs.c` is a 33-line placeholder in the open source drop; the real code is the closed PPL pmap, or 8796's `PMAP_SUPPORT_PROTOTYPES` table in `pmap.c` | `overrides/osfmk/arm/pmap/pmap_cs.c` defines them the way `x86_64/pmap.c` does: unsupported, return `KERN_SUCCESS` |
+| `pmap_pending_preemption` | `pmap.o` | only out-of-line when `SCHED_PREEMPTION_DISABLE_DEBUG && (DEBUG \|\| DEVELOPMENT)` — which `PERF_DBG_DEV` sets — and the body lives in the PPL | same override file: returns `_pmap_pending_preemption_real()` |
+| `recount_current_thread_time_mach` | `thread.o` | the redwood-added `thread_runnable_and_run_self()` (for apfs lock statistics) called iOS 16's recount | `timer_grab(&thread->user_timer) + timer_grab(&thread->system_timer)`, the same sum `sched_prim.c` uses |
 
 ## Build plumbing that had to change (not part of the patch)
 
