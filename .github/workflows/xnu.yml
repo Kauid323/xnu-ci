@@ -102,7 +102,22 @@ jobs:
         run: ./scripts/setup-theos.sh "$XNU_SDK"
 
       - name: hackios (xnu-deps + build script)
-        run: git clone --depth 1 https://github.com/oosexgang/hackios-xnu-kernel.git hackios
+        # Pinned, not `--depth 1` of the default branch: upstream renamed every
+        # redwood_*.c to hakios.*.c on 2026-10-25 and this port's patch and
+        # scripts/fetch-xnu.sh still name the old files, so a moving HEAD turns
+        # a green build red for a reason that has nothing to do with our code.
+        # Bump this on purpose, after checking xnu/files against the list at the
+        # end of scripts/fetch-xnu.sh.  --filter=blob:none + an explicit
+        # checkout is how to land on a non-tip commit without pulling the whole
+        # history; .git is kept because the build stamps the loader with it.
+        env:
+          HACKIOS_REV: 034f2f6523ad477803d063251a5716831e081eb9
+        run: |
+          set -eux
+          git clone -q --filter=blob:none --no-checkout \
+            https://github.com/oosexgang/hackios-xnu-kernel.git hackios
+          git -C hackios checkout -q "$HACKIOS_REV"
+          git -C hackios log --oneline -1
 
       - name: cache xnu-deps sources
         uses: actions/cache@v4
