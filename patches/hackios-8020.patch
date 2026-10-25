@@ -2308,7 +2308,7 @@ index 68df6da..6c4c594 100644
  #endif
  
 diff --git a/osfmk/arm64/machine_routines.c b/osfmk/arm64/machine_routines.c
-index 669cdfc..a1f044d 100644
+index 669cdfc..988b39b 100644
 --- a/osfmk/arm64/machine_routines.c
 +++ b/osfmk/arm64/machine_routines.c
 @@ -712,6 +712,9 @@ ml_get_machine_mem(void)
@@ -2331,7 +2331,7 @@ index 669cdfc..a1f044d 100644
  	while (1) {
  		;
  	}
-@@ -910,6 +916,99 @@ ml_read_chip_revision(unsigned int *rev __unused)
+@@ -910,6 +916,100 @@ ml_read_chip_revision(unsigned int *rev __unused)
  #endif
  }
  
@@ -2419,19 +2419,20 @@ index 669cdfc..a1f044d 100644
 +bool
 +ml_cpu_idle_time(int cpu_id, uint64_t *idle)
 +{
-+	struct recount_usage usage = { 0 };
-+
-+	if (cpu_id < 0 || cpu_id >= MAX_SCHED_CPUS || processor_array[cpu_id] == PROCESSOR_NULL) {
-+		return false;
-+	}
-+	recount_processor_usage(&processor_array[cpu_id]->pr_recount, &usage, idle);
-+	return true;
++	/*
++	 * (redwood) iOS 16 keeps this in processor_t::pr_recount and answers it with
++	 * recount_processor_usage(); 8020 has neither, so there is no idle time to report and the
++	 * caller (redwood_cpufreq.c) has to make do without it.
++	 */
++	(void)cpu_id;
++	(void)idle;
++	return false;
 +}
 +
  void
  ml_parse_cpu_topology(void)
  {
-@@ -923,6 +1022,7 @@ ml_parse_cpu_topology(void)
+@@ -923,6 +1023,7 @@ ml_parse_cpu_topology(void)
  	int64_t cluster_max_cpu_phys_id[MAX_CPU_CLUSTER_PHY_ID + 1];
  	const boolean_t cpus_boot_arg_present = PE_parse_boot_argn("cpus", &cpu_boot_arg, sizeof(cpu_boot_arg));
  	const boolean_t cpumask_boot_arg_present = PE_parse_boot_argn("cpumask", &cpumask_boot_arg, sizeof(cpumask_boot_arg));
@@ -2439,7 +2440,7 @@ index 669cdfc..a1f044d 100644
  
  	// The cpus=N and cpumask=N boot args cannot be used simultaneously. Flag this
  	// so that we trigger a panic later in the boot process, once serial is enabled.
-@@ -983,6 +1083,20 @@ ml_parse_cpu_topology(void)
+@@ -983,6 +1084,20 @@ ml_parse_cpu_topology(void)
  		cpu->phys_id = (uint32_t)ml_readprop(child, "reg", ML_READPROP_MANDATORY);
  
  		cpu->l2_access_penalty = (uint32_t)ml_readprop(child, "l2-access-penalty", 0);
@@ -2460,7 +2461,7 @@ index 669cdfc..a1f044d 100644
  		cpu->l2_cache_size = (uint32_t)ml_readprop(child, "l2-cache-size", 0);
  		cpu->l2_cache_id = (uint32_t)ml_readprop(child, "l2-cache-id", 0);
  		cpu->l3_cache_size = (uint32_t)ml_readprop(child, "l3-cache-size", 0);
-@@ -1082,6 +1196,7 @@ ml_parse_cpu_topology(void)
+@@ -1082,6 +1197,7 @@ ml_parse_cpu_topology(void)
  	cluster_offsets[0] = 0;
  #endif
  	assert(topology_info.boot_cpu != NULL);
@@ -2468,7 +2469,7 @@ index 669cdfc..a1f044d 100644
  	ml_read_chip_revision(&topology_info.chip_revision);
  
  	/*
-@@ -1334,17 +1449,15 @@ ml_processor_register(ml_processor_info_t *in_processor_info,
+@@ -1334,17 +1450,15 @@ ml_processor_register(ml_processor_info_t *in_processor_info,
  	processor_t processor = PERCPU_GET_RELATIVE(processor, cpu_data, this_cpu_datap);
  	if (!is_boot_cpu) {
  		processor_init(processor, this_cpu_datap->cpu_number, pset);
@@ -2494,7 +2495,7 @@ index 669cdfc..a1f044d 100644
  
  	*processor_out = processor;
  	*ipi_handler_out = cpu_signal_handler;
-@@ -2106,8 +2219,16 @@ _enable_virtual_timer(void)
+@@ -2106,8 +2220,16 @@ _enable_virtual_timer(void)
  	uint64_t cntvctl = CNTV_CTL_EL0_ENABLE; /* One wants to use 32 bits, but "mrs" prefers it this way */
  
  	__builtin_arm_wsr64("CNTV_CTL_EL0", cntvctl);

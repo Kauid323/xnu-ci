@@ -42,6 +42,14 @@ else
   exit 1
 fi
 
+# Files that have to be written for 8020 rather than taken from hackios: same path, our version
+# wins. Kept as whole files, not as a patch, because these are files Apple's tree does not have.
+if [ -d ../overrides ]; then
+  n=$(find ../overrides -type f | wc -l)
+  echo "== overriding $n file(s) from overrides/"
+  cp -a ../overrides/. .
+fi
+
 # everything the patch and files/ are supposed to provide, checked before the compiler finds out
 echo "== checking the tree is complete"
 missing=0
