@@ -6625,10 +6625,56 @@ index ac56edb0ca6f..0a292914795d 100644
  #endif /* CONFIG_SCHED_AUTO_JOIN */
  
 diff --git a/osfmk/kern/zalloc.c b/osfmk/kern/zalloc.c
-index 97acb9c06cde..14c8d53ab496 100644
+index 97acb9c06cde..625ec75a9f69 100644
 --- a/osfmk/kern/zalloc.c
 +++ b/osfmk/kern/zalloc.c
-@@ -3989,6 +3989,22 @@ zcram_and_lock(zone_t zone, vm_offset_t addr, uint32_t pg_va_new,
+@@ -2132,13 +2132,21 @@ zone_meta_bits_init(struct zone_page_metadata *meta,
+ 		/*
+ 		 * We're called with the metadata zm_bitmap fields already
+ 		 * zeroed out.
++		 *
++		 * (cactus bring-up) Every word is computed from its own `left`, with no
++		 * value carried from one iteration to the next. The original form
++		 * ("if (32 * i + 32 <= count) ~0u else mask_lt(count)") is correct C,
++		 * but clang unrolls it by two and gives the odd word a threshold of 32
++		 * instead of 64 (see the disassembly of _zcram_and_lock at
++		 * 0xfffffff0072d99d4: "mov w17, #0x20"), so for any 32 < count < 64 the
++		 * second word came out as 0xffffffff. The scan then handed out index
++		 * count itself, one past the end of the chunk, and the caller faulted on
++		 * the unmapped page it landed on. Keep this form: it is per-word local.
+ 		 */
+ 		for (size_t i = 0; 32 * i < count; i++) {
+-			if (32 * i + 32 <= count) {
+-				meta[i].zm_bitmap = ~0u;
+-			} else {
+-				meta[i].zm_bitmap = zba_map_mask_lt(uint32_t, count);
+-			}
++			uint32_t left = count - (uint32_t)(32 * i);
++
++			meta[i].zm_bitmap = left >= 32 ? ~0u : (uint32_t)((1u << left) - 1);
+ 		}
+ 	} else {
+ 		uint32_t order = flsll((nbits - 1) / ZBA_GRANULE_BITS);
+@@ -2151,14 +2159,11 @@ zone_meta_bits_init(struct zone_page_metadata *meta,
+ 		bits = (uint64_t *)zba_alloc(order);
+ 		zba_unlock();
+ 
++		/* (cactus bring-up) same per-word form as above, for the same reason */
+ 		for (size_t i = 0; i < 1u << order; i++) {
+-			if (64 * i + 64 <= count) {
+-				bits[i] = ~0ull;
+-			} else if (64 * i < count) {
+-				bits[i] = zba_map_mask_lt(uint64_t, count);
+-			} else {
+-				bits[i] = 0ull;
+-			}
++			uint64_t left = 64 * i < count ? (uint64_t)(count - 64 * i) : 0;
++
++			bits[i] = left >= 64 ? ~0ull : left ? (1ull << left) - 1 : 0ull;
+ 		}
+ 
+ 		meta->zm_bitmap = (uint32_t)((vm_offset_t)bits -
+@@ -3989,6 +3994,22 @@ zcram_and_lock(zone_t zone, vm_offset_t addr, uint32_t pg_va_new,
  		if (!zone->z_permanent) {
  			zone_meta_bits_init(meta, free_end, zone->z_chunk_elems);
  		}
@@ -6651,7 +6697,7 @@ index 97acb9c06cde..14c8d53ab496 100644
  	} else {
  		assert(!zone->z_percpu && !zone->z_permanent);
  
-@@ -4762,6 +4778,10 @@ zone_expand_locked(zone_t z, zalloc_flags_t flags, bool (*pred)(zone_t))
+@@ -4762,6 +4783,10 @@ zone_expand_locked(zone_t z, zalloc_flags_t flags, bool (*pred)(zone_t))
  
  			if (pages >= min_pages &&
  			    !zone_expand_wait_for_pages(waited)) {
@@ -6662,7 +6708,7 @@ index 97acb9c06cde..14c8d53ab496 100644
  				break;
  			}
  
-@@ -6154,6 +6174,25 @@ zalloc_import(zone_t zone, zone_element_t *elems, zalloc_flags_t flags,
+@@ -6154,6 +6179,25 @@ zalloc_import(zone_t zone, zone_element_t *elems, zalloc_flags_t flags,
  
  		do {
  			eidx = zone_meta_find_and_clear_bit(zone, meta, flags);
@@ -6688,7 +6734,7 @@ index 97acb9c06cde..14c8d53ab496 100644
  			elems[i++] = zone_element_encode(page, eidx);
  			size += esize;
  		} while (i < n && old_size + size + esize <= max_size);
-@@ -6196,6 +6235,23 @@ zalloc_return(zone_t zone, zone_element_t ze, zalloc_flags_t flags __unused,
+@@ -6196,6 +6240,23 @@ zalloc_return(zone_t zone, zone_element_t ze, zalloc_flags_t flags __unused,
  	addr = kasan_tbi_fix_address_tag(addr);
  #endif /* CONFIG_KERNEL_TBI && KASAN_TBI */
  #if ZALLOC_ENABLE_ZERO_CHECK
