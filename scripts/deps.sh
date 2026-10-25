@@ -13,7 +13,7 @@ echo "XNU_SDK_PATH=$XNU_SDK_PATH"
 test -d "$XNU_SRC"
 test -d "$XNU_SDK_PATH"
 
-# Two things in 8020 that the xnu-deps scripts, written for 8796, do not expect:
+# Three things the xnu-deps scripts (written for 8796) and the Linux toolchain do not expect:
 #
 # 1. osfmk/libsa/string.h gained `#include <san/memintrinsics.h>` under #ifdef PRIVATE, and it is
 #    exported as EXPORT_HDRS/osfmk/string.h. Both hand-written compile lines in xnu-deps put
@@ -26,7 +26,18 @@ for f in hackios/xnu-deps/setup.sh hackios/xnu-deps/build/pthread/build.sh; do
   echo "== $f: san headers added to the include path"
 done
 
-# 2. glibc has no strlcpy/strlcat (they are BSD). 8020's SETUP/replacecontents uses strlcat, so
+# 2. xnu-clang drops -enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang,
+#    assuming Apple's clang (which enables -ftrivial-auto-var-init=zero without it). Ubuntu's
+#    clang 14 refuses -ftrivial-auto-var-init=zero unless that flag is there, so keep it.
+XC=hackios/xnu-deps/host/bin/xnu-clang
+[ -f "$XC" ] || { echo "!! $XC is missing: nothing can be compiled"; exit 1; }
+sed -i '/-enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang) ;;/d' "$XC"
+if grep -q 'trivial-auto-var-init-zero-knowing' "$XC"; then
+  echo "!! xnu-clang still filters the auto-var-init escape flag"; exit 1
+fi
+echo "== $XC: -enable-trivial-auto-var-init-zero-... is passed through"
+
+# 3. glibc has no strlcpy/strlcat (they are BSD). 8020's SETUP/replacecontents uses strlcat, so
 #    the first host tool the build compiles fails to link. hostcompat.h is force-included into
 #    every host tool (`HOST_CC=clang -include .../hostcompat.h` in hackios/xnu-build.sh), which
 #    is exactly where the rest of the glibc gaps are filled in, so the shim goes there.
