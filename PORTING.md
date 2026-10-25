@@ -2,13 +2,13 @@
 
 `patches/hackios-8020.patch` is the redwood work rebased from `xnu-8796.121.2` (iOS 16.5) onto
 `xnu-8020.140.41` (iOS 15.3). It applies to a pristine tag with **no fuzz and no rejects**
-(`patch -F0`, 76 files, 193 hunks).
+(`patch -F0`, 77 files, 194 hunks).
 
 The redwood work is two halves, exactly as in `hackios/xnu/apply.sh`:
 
 | | what | where |
 |---|---|---|
-| changes to Apple's files | 193 hunks in 76 files | `patches/hackios-8020.patch` |
+| changes to Apple's files | 194 hunks in 77 files | `patches/hackios-8020.patch` |
 | files Apple's tree does not have | 104 files | `hackios/xnu/files/` (copied by `scripts/fetch-xnu.sh`) |
 
 The patch does **not** carry the 104 new files. `scripts/fetch-xnu.sh` copies them from the
@@ -107,6 +107,14 @@ piece of the platform (the PPL monitor, libcorecrypto) or where iOS 16 moved cod
 | `recount_current_thread_time_mach` | `thread.o` | the redwood-added `thread_runnable_and_run_self()` (for apfs lock statistics) called iOS 16's recount | `timer_grab(&thread->user_timer) + timer_grab(&thread->system_timer)`, the same sum `sched_prim.c` uses |
 
 ## Build plumbing that had to change (not part of the patch)
+
+* `makedefs/MakeInc.kernel`: the `.dSYM` rule ran `$(DSYMUTIL) --minimize …`, and `DSYMUTIL` comes
+  from `$(XCRUN) -sdk $(SDKROOT) -find dsymutil` (`MakeInc.cmd:220`). The `xcrun` shim in
+  `xnu-deps/host/bin` does not answer `-find`, so it expanded to nothing and bash reported
+  `--minimize: command not found`. There is no dsymutil on this toolchain at all, and the
+  unstripped kernel has the same symbols, so the bundle is now assembled by hand
+  (`mkdir` + `cp` + `touch`) instead of generated. This is the last thing that failed before the
+  kernel existed.
 
 * `scripts/fetch-xnu.sh` copies `hackios/xnu/files/.` after applying the patch and then verifies
   the tree is complete.
