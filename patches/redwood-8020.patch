@@ -1,0 +1,33 @@
+--- a/osfmk/arm64/user_exception_trace.c
++++ b/osfmk/arm64/user_exception_trace.c
+@@ -152,7 +152,6 @@
+  * The addresses are symbolized on the host (qemu/symstack.py).
+  * The name "top" asks for something else: who has had the processor (see ustacks_top()).
+  */
+-#include <kern/recount.h>
+ #include <kern/thread_call.h>
+ #include <kern/clock.h>
+ #include <kern/queue.h>
+@@ -310,14 +309,19 @@
+ 	lck_mtx_lock(&tasks_threads_lock);
+ 	queue_iterate(&tasks, task, task_t, tasks) {
+ 		struct proc *proc = get_bsdtask_info(task);
+-		struct recount_times_mach times;
++		struct task_absolutetime_info ati;
++		mach_msg_type_number_t ati_count = TASK_ABSOLUTETIME_INFO_COUNT;
+ 
+ 		if (count == USTACKS_TOP_TASKS || proc == NULL) {
+ 			continue;
+ 		}
+-		times = recount_task_times(task);
++		/* (redwood) 8020 has no recount; task_info() sums the threads that are still running,
++		 * which is what the "top" output wants (processor_t::pr_recount arrived with iOS 16). */
++		if (task_info(task, TASK_ABSOLUTETIME_INFO, (task_info_t)&ati, &ati_count) != KERN_SUCCESS) {
++			continue;
++		}
+ 		now[count].pid = proc_pid(proc);
+-		now[count].total = times.rtm_user + times.rtm_system;
++		now[count].total = ati.total_user + ati.total_system;
+ 		strlcpy(now[count].name, proc_name_address(proc), sizeof(now[count].name));
+ 		count++;
+ 	}

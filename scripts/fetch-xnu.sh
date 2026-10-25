@@ -50,6 +50,16 @@ if [ -d ../overrides ]; then
   cp -a ../overrides/. .
 fi
 
+# Small changes to the files just copied: a patch, because the patch above is applied before they
+# exist and could not touch them.
+if [ -s ../patches/redwood-8020.patch ]; then
+  echo "== applying patches/redwood-8020.patch to the copied files"
+  if ! git apply --check ../patches/redwood-8020.patch 2>../apply-files.log; then
+    echo "!! it does not apply; see the log"; cat ../apply-files.log; exit 1
+  fi
+  git apply ../patches/redwood-8020.patch
+fi
+
 # everything the patch and files/ are supposed to provide, checked before the compiler finds out
 echo "== checking the tree is complete"
 missing=0
