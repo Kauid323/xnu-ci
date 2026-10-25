@@ -13,4 +13,15 @@ echo "XNU_SDK_PATH=$XNU_SDK_PATH"
 test -d "$XNU_SRC"
 test -d "$XNU_SDK_PATH"
 
+set +e
 JOBS=$(nproc) ./hackios/xnu-deps/setup.sh
+rc=$?
+set -e
+if [ $rc -ne 0 ]; then
+  for f in hackios/xnu-deps/exporthdrs.log hackios/xnu-deps/build/pthread/build.log; do
+    [ -f "$f" ] || continue
+    echo "======== $f (tail)"
+    tail -80 "$f"
+  done
+  exit $rc
+fi

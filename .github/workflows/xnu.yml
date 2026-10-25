@@ -91,7 +91,14 @@ jobs:
             git curl tar xz-utils make clang lld flex bison m4 perl python3 \
             autoconf automake libssl-dev libelf-dev zlib1g-dev pkg-config
 
+      - name: cache theos
+        uses: actions/cache@v4
+        with:
+          path: theos
+          key: theos-${{ env.XNU_SDK }}-1
+
       - name: theos (Linux cctools + SDK)
+        id: theos
         run: ./scripts/setup-theos.sh "$XNU_SDK"
 
       - name: hackios (xnu-deps + build script)
@@ -136,6 +143,8 @@ jobs:
           path: |
             build.log
             deps.log
+            hackios/xnu-deps/exporthdrs.log
+            hackios/xnu-deps/build/**/*.log
           if-no-files-found: warn
 
       - uses: actions/upload-artifact@v4
@@ -144,3 +153,9 @@ jobs:
           name: mach-kernel
           path: out/
           if-no-files-found: warn
+
+      - name: verdict
+        if: always()
+        run: |
+          echo "deps=${deps:-skipped} build=${build:-skipped}"
+          [ "${deps:-1}" = "0" ] && [ "${build:-1}" = "0" ]
