@@ -17,6 +17,16 @@ export MACHINE=${MACHINE:-BCM2837}
 JOBS=$(nproc) ./hackios/xnu-build.sh -j"$(nproc)" build
 
 mkdir -p out
-cp -v src/BUILD/obj/*/mach.* out/ 2>/dev/null || cp -v src/BUILD/obj/*/kernel.* out/ 2>/dev/null || {
-  echo "no kernel in src/BUILD/obj"; find src/BUILD -maxdepth 3 -name 'mach*' | head; exit 1; }
+# Only regular files directly under BUILD/obj/<config>/: the same glob also matches the .link and
+# .dSYM directories, and "cp" without -r then fails and takes the whole step with it.
+n=0
+while IFS= read -r f; do
+  cp -v "$f" out/
+  n=$((n + 1))
+done < <(find src/BUILD/obj -mindepth 2 -maxdepth 2 -type f -name 'mach.*' 2>/dev/null)
+if [ "$n" -eq 0 ]; then
+  echo "no kernel in src/BUILD/obj"
+  find src/BUILD -maxdepth 3 -name 'mach*' | head
+  exit 1
+fi
 ls -la out/
