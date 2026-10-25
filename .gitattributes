@@ -1,0 +1,6 @@
+# Linux CI checks out this repo: shell scripts and the patch must keep LF endings,
+# or the shebang and `patch -p1` both break.
+*.patch -text
+*.sh    text eol=lf
+*.yml   text eol=lf
+*.md    text eol=lf
