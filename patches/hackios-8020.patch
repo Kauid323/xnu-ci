@@ -1630,6 +1630,21 @@ index 91d9d52..0eeae8c 100644
 +
 +options   CONFIG_KERNEL_INTEGRITY		# <kernel_integrity>
 +options   CONFIG_UBSAN_MINIMAL		# <ubsan_minimal>
+diff --git a/iokit/Kernel/IOBufferMemoryDescriptor.cpp b/iokit/Kernel/IOBufferMemoryDescriptor.cpp
+index f0d246a..efd713e 100644
+--- a/iokit/Kernel/IOBufferMemoryDescriptor.cpp
++++ b/iokit/Kernel/IOBufferMemoryDescriptor.cpp
+@@ -331,8 +331,9 @@ IOBufferMemoryDescriptor::initWithPhysicalMask(
+ 			kma_flags_t kma_flags = (kma_flags_t) (KMA_GUARD_FIRST |
+ 			    KMA_GUARD_LAST | KMA_ZERO);
+ 
++			/* (redwood) this returns bool; NULL is nullptr in our C++ headers */
+ 			if (((uint32_t) alignment) != alignment) {
+-				return NULL;
++				return false;
+ 			}
+ 			if (kheap == KHEAP_DATA_BUFFERS) {
+ 				kma_flags = (kma_flags_t) (kma_flags | KMA_DATA);
 diff --git a/iokit/Kernel/IOPMrootDomain.cpp b/iokit/Kernel/IOPMrootDomain.cpp
 index 06edc9c..de2c1d6 100644
 --- a/iokit/Kernel/IOPMrootDomain.cpp
@@ -2899,6 +2914,25 @@ index c870c02..fc01311 100644
  				 * Framebuffers would normally use VM_WIMG_RT, which
  				 * io_map doesn't support.  However this buffer is set up
  				 * by the bootloader and doesn't require D$ cleaning, so
+diff --git a/osfmk/ipc/mach_kernelrpc.c b/osfmk/ipc/mach_kernelrpc.c
+index f7273ba..2b5d49b 100644
+--- a/osfmk/ipc/mach_kernelrpc.c
++++ b/osfmk/ipc/mach_kernelrpc.c
+@@ -274,7 +274,13 @@ _kernelrpc_mach_port_get_attributes_trap(struct _kernelrpc_mach_port_get_attribu
+ 	mach_msg_type_number_t count;
+ 
+ 	if (!task) {
+-		goto done;
++		/*
++		 * (redwood) return instead of "goto done": the label sits after the
++		 * stack array below, which is variably modified, and C forbids jumping
++		 * into its scope. rv is already MACH_SEND_INVALID_DEST here, so this is
++		 * the same value done would have returned.
++		 */
++		return rv;
+ 	}
+ 
+ 	// MIG does not define the type or size of the mach_port_info_t out array
 diff --git a/osfmk/kern/debug.c b/osfmk/kern/debug.c
 index 8549847..9973f0c 100644
 --- a/osfmk/kern/debug.c

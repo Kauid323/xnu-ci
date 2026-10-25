@@ -2,13 +2,13 @@
 
 `patches/hackios-8020.patch` is the redwood work rebased from `xnu-8796.121.2` (iOS 16.5) onto
 `xnu-8020.140.41` (iOS 15.3). It applies to a pristine tag with **no fuzz and no rejects**
-(`patch -F0`, 72 files, 185 hunks).
+(`patch -F0`, 74 files, 190 hunks).
 
 The redwood work is two halves, exactly as in `hackios/xnu/apply.sh`:
 
 | | what | where |
 |---|---|---|
-| changes to Apple's files | 185 hunks in 72 files | `patches/hackios-8020.patch` |
+| changes to Apple's files | 190 hunks in 74 files | `patches/hackios-8020.patch` |
 | files Apple's tree does not have | 104 files | `hackios/xnu/files/` (copied by `scripts/fetch-xnu.sh`) |
 
 The patch does **not** carry the 104 new files. `scripts/fetch-xnu.sh` copies them from the
@@ -50,6 +50,26 @@ dies at the first `bsd/dev/redwood_*.c` in `bsd/conf/files`.
 | 10 | `osfmk/kern/percpu.h` | 8020 already computes the iterator with `__next_` and integer casts | **narrowed**: the bounds test became `(vm_address_t)__base <= (vm_address_t)__end` in both `percpu_foreach` and `percpu_foreach_secondary`. As pointers, with one CPU, the two ends belong to no object and the comparison is undefined; the loop must not run. |
 | — | `bsd/kern/sys_generic.c` #3, #4 | `dofilewrite` already fixed by the patch; **`write_internal` does not exist in 8020** (added in iOS 16 for `guardid`) | **dropped** #4; #3 was already satisfied. |
 
+## What the compiler said (8020 vs 8796 drift in the copied files)
+
+The 104 files were written against 8796's headers. Everything below was found by building, in the
+order it appeared. All of `bsd/dev/redwood_*.c`, `bsd/miscfs/apfs/*`, `bsd/miscfs/ramfs`,
+`bsd/pthread/pthread_kext_static.c`, `osfmk/arm64/{generic_arm64_support,loader_return,psci_smp}.c`
+and `libkern/amfi/miniamfi.c` now compile.
+
+| file | 8796 → 8020 | fix |
+|---|---|---|
+| `libkern/amfi/miniamfi.c` | `amfi_t` lost `TrustCache`, `*WithProc`, `write_internal`, gained `CoreEntitlements`; libTrustCache types (`TCReturn_t`, `TrustCacheRuntime_t`) do not exist | **whole file rewritten** in `overrides/` against the 9-member `amfi_t`; `CoreEntitlements` stays zeroed (only the PPL pmap would call it, and this config has no PPL) |
+| `osfmk/arm64/machine_routines.c` | `ml_cpu_idle_time()` read `processor_t::pr_recount` / `struct recount_usage` (iOS 16 `recount`) | returns `false` with a comment — no recount in 8020 |
+| `osfmk/arm64/user_exception_trace.c` | `#include <kern/recount.h>` + `recount_task_times()` | `task_info(TASK_ABSOLUTETIME_INFO)` instead; in `patches/redwood-8020.patch` because the file is copied *after* the main patch |
+| `osfmk/ipc/mach_kernelrpc.c` | `goto done` jumps over `typeof(...) info[max_count]`, a variably modified array — C forbids it | `return rv;` at that one site (`rv` is already `MACH_SEND_INVALID_DEST`); Apple's own file, so it is in the main patch |
+| `iokit/Kernel/IOBufferMemoryDescriptor.cpp` | `return NULL;` in a `bool` function; xnu's C++ `stddef.h` defines `NULL` as `nullptr`, which does not convert | `return false;` |
+
+Rule of thumb: whole-file rewrites go in `overrides/`, small edits to files that `files/` provides
+go in `patches/redwood-8020.patch` (applied after the copy), everything else goes in the main
+patch, which is regenerated from the working tree with
+`git -c core.autocrlf=false diff > patches/hackios-8020.patch`.
+
 ## Build plumbing that had to change (not part of the patch)
 
 * `scripts/fetch-xnu.sh` copies `hackios/xnu/files/.` after applying the patch and then verifies
@@ -64,11 +84,11 @@ dies at the first `bsd/dev/redwood_*.c` in `bsd/conf/files`.
 
 ## Not yet done
 
-The patch now applies; the compiler has not spoken. The 104 new files were written against
-8796's headers, so the first build is expected to fail on API drift — `kalloc_type`/`zalloc`
-flags, `vnode`/`VFS` KPI, IOKit (`IOPlatformExpert`, `IOMobileFramebuffer`), `pthread_kext`.
-Iterate with `build=true`; `build.log` and `deps.log` come back as the `build-log` artifact and
-the first errors are in the run summary.
+Every directory that produces objects has now been through the compiler (`config`, `san`, `libsa`,
+`osfmk`, `bsd`, `iokit`, `libkern`, `pexpert`, `security`), and `LDFILELIST bsd` runs. What is
+left is the link: `build_all_bootstrap_DEVELOPMENT` is the target that has been failing, so the
+next round of errors should be `undefined symbol` at `mach_kernelrpc`/kernel link time, not
+compile errors.
 
 Open items after the kernel links:
 
