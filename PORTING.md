@@ -64,7 +64,18 @@ and `libkern/amfi/miniamfi.c` now compile.
 | `osfmk/arm64/user_exception_trace.c` | `#include <kern/recount.h>` + `recount_task_times()` | `task_info(TASK_ABSOLUTETIME_INFO)` instead; in `patches/redwood-8020.patch` because the file is copied *after* the main patch |
 | `osfmk/ipc/mach_kernelrpc.c` | `goto done` jumps over `typeof(...) info[max_count]`, a variably modified array — C forbids it | `return rv;` at that one site (`rv` is already `MACH_SEND_INVALID_DEST`); Apple's own file, so it is in the main patch |
 | `iokit/Kernel/IOBufferMemoryDescriptor.cpp` | `return NULL;` in a `bool` function; xnu's C++ `stddef.h` defines `NULL` as `nullptr`, which does not convert | `return false;` |
-| `osfmk/minicrypto/mc_provider.c` | `#include <libkern/crypto/rand.h>` → `<sys/types.h>` → `<machine/types.h>`, which in an **osfmk** compile resolves to `osfmk/libsa/machine/types.h` → the 32-bit `libsa/arm/types.h`; its `dev_t`/`daddr_t`/`clock_t` then collide with the ones `osfmk/libsa/string.h` already pulled in | the include is unused (nothing in `minicrypto/` calls `random_buf` or `cc_rand_generate`), so it is dropped; in `patches/redwood-8020.patch` |
+| `osfmk/minicrypto/mc_provider.c` | `crypto_digest_alg_t`, `crypto_random_ctx_t`, `CRYPTO_DIGEST_ALG_*`, `CCKPRNG_ENTROPY_SIZE` do not exist in 8020 — iOS 16 added them to `libkern/crypto/{crypto,rand,register_crypto}.h` and to corecrypto | the three headers are **restored from 8796** in `overrides/libkern/libkern/crypto/`; `CCKPRNG_ENTROPY_SIZE` (64) is defined locally in `mc_provider.c` |
+
+The three restored crypto headers deserve a note of their own, because they also close a trap that
+has nothing to do with crypto. In an **osfmk** compile the include path is
+`-I. -I osfmk -I EXPORT_HDRS/osfmk … -I EXTERNAL_HEADERS -I osfmk/libsa`, and there is no
+`osfmk/machine/types.h`. So a `<machine/types.h>` reached from `bsd/sys/types.h` resolves to
+`osfmk/libsa/machine/types.h`, which maps `__arm64__` to the **32-bit** `libsa/arm/types.h`
+(`dev_t` = `long`, `daddr_t` = `unsigned int`). Those collide with the `dev_t`/`daddr_t`/`clock_t`
+that `osfmk/libsa/string.h` has already defined, and the compile dies on three typedef
+redefinitions that point at Apple's own headers. 8796's `rand.h` avoids it by including
+`libkern/crypto/crypto.h` (which is `<stddef.h>/<stdint.h>/<sys/cdefs.h>` only) instead of
+`<sys/types.h>`, so restoring the iOS 16 headers fixes both problems at once.
 
 Two small helpers in `scripts/` exist to answer this kind of question without a build:
 

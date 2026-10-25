@@ -33,15 +33,16 @@
  	}
 --- a/osfmk/minicrypto/mc_provider.c
 +++ b/osfmk/minicrypto/mc_provider.c
-@@ -22,7 +22,10 @@
+@@ -22,7 +22,12 @@
  #include <kern/simple_lock.h>
  #include <machine/machine_routines.h>
  #include <libkern/crypto/register_crypto.h>
--#include <libkern/crypto/rand.h>
-+/* (redwood) rand.h is not used here, and it drags in <sys/types.h>: in an osfmk compile
-+ * "-I osfmk/libsa" is ahead of the machine headers, so <machine/types.h> resolves to the
-+ * 32-bit libsa one and its dev_t/daddr_t/clock_t collide with the ones libsa/string.h
-+ * already defined. */
++/* (redwood) 8796's corecrypto had this; 8020's cckprng.h only has the SEED/POOL/KEY
++ * sizes, and this is just the size of one round of entropy input. */
++#ifndef CCKPRNG_ENTROPY_SIZE
++#define CCKPRNG_ENTROPY_SIZE 64
++#endif
+ #include <libkern/crypto/rand.h>
  #include <corecrypto/cc_priv.h>
  #include <corecrypto/ccdigest.h>
  #include <corecrypto/ccdrbg.h>

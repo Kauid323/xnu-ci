@@ -1,7 +1,7 @@
 import os, re, sys
 
 root = sys.argv[1] if len(sys.argv) > 1 else '/tmp/verify'
-srcdir = 'hackios/xnu/files'
+srcdir = sys.argv[2] if len(sys.argv) > 2 else 'hackios/xnu/files'
 
 hdrs = set()
 for dp, dn, fn in os.walk(root):
