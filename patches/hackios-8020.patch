@@ -6625,7 +6625,7 @@ index ac56edb0ca6f..0a292914795d 100644
  #endif /* CONFIG_SCHED_AUTO_JOIN */
  
 diff --git a/osfmk/kern/zalloc.c b/osfmk/kern/zalloc.c
-index 97acb9c06cde..5e0196b5ac2c 100644
+index 97acb9c06cde..ca5c46dd33c0 100644
 --- a/osfmk/kern/zalloc.c
 +++ b/osfmk/kern/zalloc.c
 @@ -4762,6 +4762,10 @@ zone_expand_locked(zone_t z, zalloc_flags_t flags, bool (*pred)(zone_t))
@@ -6639,7 +6639,7 @@ index 97acb9c06cde..5e0196b5ac2c 100644
  				break;
  			}
  
-@@ -6196,6 +6200,19 @@ zalloc_return(zone_t zone, zone_element_t ze, zalloc_flags_t flags __unused,
+@@ -6196,6 +6200,23 @@ zalloc_return(zone_t zone, zone_element_t ze, zalloc_flags_t flags __unused,
  	addr = kasan_tbi_fix_address_tag(addr);
  #endif /* CONFIG_KERNEL_TBI && KASAN_TBI */
  #if ZALLOC_ENABLE_ZERO_CHECK
@@ -6650,10 +6650,14 @@ index 97acb9c06cde..5e0196b5ac2c 100644
 +	 */
 +	if (zone_addr_size_crosses_page(addr, elem_size) &&
 +	    pmap_find_phys(kernel_pmap, trunc_page(addr + elem_size - 1)) == 0) {
-+		kprintf("zzc: %s elem %p size %x chunk %p pages %u elems %u: tail %p unmapped\n",
-+		    zone->z_name, (void *)addr, (unsigned)elem_size,
++		kprintf("zzc: %s idx %u elem %p size %x zsize %u safe %u oob %u "
++		    "chunk %p pages %u elems %u chunkend %p tail %p unmapped\n",
++		    zone->z_name, (unsigned)zone_element_idx(ze), (void *)addr,
++		    (unsigned)elem_size, (unsigned)zone->z_elem_size,
++		    (unsigned)zone_elem_size_safe(zone), (unsigned)zone_oob_offs(zone),
 +		    (void *)zone_element_base(ze), (unsigned)zone->z_chunk_pages,
 +		    (unsigned)zone->z_chunk_elems,
++		    (void *)(zone_element_base(ze) + ptoa(zone->z_chunk_pages)),
 +		    (void *)trunc_page(addr + elem_size - 1));
 +	}
  	zalloc_validate_element(zone, addr, elem_size, flags);
