@@ -13,10 +13,23 @@ echo "XNU_SDK_PATH=$XNU_SDK_PATH"
 test -d "$XNU_SRC"
 test -d "$XNU_SDK_PATH"
 
-# glibc has no strlcpy/strlcat (they are BSD). 8020's SETUP/replacecontents uses strlcat, so the
-# first host tool the build compiles fails to link. hostcompat.h is force-included into every
-# host tool (`HOST_CC=clang -include .../hostcompat.h` in hackios/xnu-build.sh), which is exactly
-# where the rest of the glibc gaps are filled in, so the shim goes there.
+# Two things in 8020 that the xnu-deps scripts, written for 8796, do not expect:
+#
+# 1. osfmk/libsa/string.h gained `#include <san/memintrinsics.h>` under #ifdef PRIVATE, and it is
+#    exported as EXPORT_HDRS/osfmk/string.h. Both hand-written compile lines in xnu-deps put
+#    osfmk/bsd/libkern/pexpert/iokit/security on the include path but not san, so the first
+#    compile against the exported headers dies. Add the one -I.
+for f in hackios/xnu-deps/setup.sh hackios/xnu-deps/build/pthread/build.sh; do
+  [ -f "$f" ] || { echo "!! $f is missing"; exit 1; }
+  sed -i 's|-I\$hdrs/security|-I$hdrs/security -I$hdrs/san|g; s|-I\$E/security|-I$E/security -I$E/san|g' "$f"
+  grep -q '\-I\$hdrs/san\|\-I\$E/san' "$f" || { echo "!! could not add -I.../san to $f"; exit 1; }
+  echo "== $f: san headers added to the include path"
+done
+
+# 2. glibc has no strlcpy/strlcat (they are BSD). 8020's SETUP/replacecontents uses strlcat, so
+#    the first host tool the build compiles fails to link. hostcompat.h is force-included into
+#    every host tool (`HOST_CC=clang -include .../hostcompat.h` in hackios/xnu-build.sh), which
+#    is exactly where the rest of the glibc gaps are filled in, so the shim goes there.
 HC=hackios/xnu-deps/hostinc/hostcompat.h
 [ -f "$HC" ] || { echo "!! $HC is missing: the host tools will not link"; exit 1; }
 if ! grep -q 'host_strlcat' "$HC"; then
@@ -47,32 +60,24 @@ open(p, 'w').write(src[:i] + shim + '\n' + src[i:])
 PY
 fi
 
+# stage 1 and stage 2 separately: the include-path fix above has to be in place before stage 2
+# compiles anything against the exported headers.
 set +e
-# 8020's exporthdrs needs a first pass to make its object directories and the generated (MIG)
-# headers; setup.sh runs it once and then insists on BUILD/obj/EXPORT_HDRS/osfmk. Do a pass
-# here, and show what it left, so the tree is either complete for setup.sh or visible to us.
-echo "== pre-exporting the kernel headers"
-./hackios/xnu-build.sh -j"$(nproc)" exporthdrs > hackios/xnu-deps/pre-exporthdrs.log 2>&1
-echo "pre-export rc=$?"
-echo "-- BUILD/obj:"; ls "$XNU_SRC/BUILD/obj" 2>/dev/null | head -20
-echo "-- EXPORT_HDRS:"; find "$XNU_SRC/BUILD" -maxdepth 6 -type d -name 'EXPORT_HDRS' 2>/dev/null
-find "$XNU_SRC/BUILD" -maxdepth 7 -type d -path '*EXPORT_HDRS*' 2>/dev/null | head -20
-set -e
-
-set +e
-JOBS=$(nproc) ./hackios/xnu-deps/setup.sh
+JOBS=$(nproc) ./hackios/xnu-deps/setup.sh --stage1
 rc=$?
+if [ $rc -eq 0 ]; then
+  JOBS=$(nproc) ./hackios/xnu-deps/setup.sh --stage2
+  rc=$?
+fi
 set -e
 if [ $rc -ne 0 ]; then
-  for f in hackios/xnu-deps/exporthdrs.log hackios/xnu-deps/pre-exporthdrs.log hackios/xnu-deps/build/pthread/build.log; do
+  for f in hackios/xnu-deps/exporthdrs.log hackios/xnu-deps/build/pthread/build.log; do
     [ -f "$f" ] || continue
     echo "======== $f (tail)"
     tail -80 "$f"
   done
   echo "======== what the export left behind"
   echo "-- BUILD/obj:"; ls "$XNU_SRC/BUILD/obj" 2>/dev/null | head -20
-  echo "-- anything named EXPORT_HDRS:"; find "$XNU_SRC/BUILD" -maxdepth 5 -type d -name 'EXPORT_HDRS' 2>/dev/null | head
-  echo "-- its contents:"; find "$XNU_SRC/BUILD" -maxdepth 7 -type d -path '*EXPORT_HDRS*' 2>/dev/null | head -30
-  echo "-- exporthdrs.log: $(wc -l < hackios/xnu-deps/exporthdrs.log 2>/dev/null) lines"
+  find "$XNU_SRC/BUILD" -maxdepth 7 -type d -path '*EXPORT_HDRS*' 2>/dev/null | head -30
   exit $rc
 fi
