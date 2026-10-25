@@ -64,6 +64,16 @@ and `libkern/amfi/miniamfi.c` now compile.
 | `osfmk/arm64/user_exception_trace.c` | `#include <kern/recount.h>` + `recount_task_times()` | `task_info(TASK_ABSOLUTETIME_INFO)` instead; in `patches/redwood-8020.patch` because the file is copied *after* the main patch |
 | `osfmk/ipc/mach_kernelrpc.c` | `goto done` jumps over `typeof(...) info[max_count]`, a variably modified array — C forbids it | `return rv;` at that one site (`rv` is already `MACH_SEND_INVALID_DEST`); Apple's own file, so it is in the main patch |
 | `iokit/Kernel/IOBufferMemoryDescriptor.cpp` | `return NULL;` in a `bool` function; xnu's C++ `stddef.h` defines `NULL` as `nullptr`, which does not convert | `return false;` |
+| `osfmk/minicrypto/mc_provider.c` | `#include <libkern/crypto/rand.h>` → `<sys/types.h>` → `<machine/types.h>`, which in an **osfmk** compile resolves to `osfmk/libsa/machine/types.h` → the 32-bit `libsa/arm/types.h`; its `dev_t`/`daddr_t`/`clock_t` then collide with the ones `osfmk/libsa/string.h` already pulled in | the include is unused (nothing in `minicrypto/` calls `random_buf` or `cc_rand_generate`), so it is dropped; in `patches/redwood-8020.patch` |
+
+Two small helpers in `scripts/` exist to answer this kind of question without a build:
+
+* `inctrace.py <tree> <file.c> <target>` — replays the include graph with the kernel's `-I` order
+  and prints the chain that reaches a header. It found the `mc_provider.c` chain above in one
+  shot (`mc_provider.c -> libkern/crypto/rand.h -> bsd/sys/types.h`, and separately
+  `-> osfmk/libsa/string.h -> osfmk/libsa/types.h`, which is the pair that collides).
+* `hdrcheck.py <tree>` — every `#include` in the 104 copied files must resolve somewhere in the
+  tree (or by basename); catches headers that 8796 had and 8020 does not.
 
 Rule of thumb: whole-file rewrites go in `overrides/`, small edits to files that `files/` provides
 go in `patches/redwood-8020.patch` (applied after the copy), everything else goes in the main

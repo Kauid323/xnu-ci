@@ -31,3 +31,17 @@
  		strlcpy(now[count].name, proc_name_address(proc), sizeof(now[count].name));
  		count++;
  	}
+--- a/osfmk/minicrypto/mc_provider.c
++++ b/osfmk/minicrypto/mc_provider.c
+@@ -22,7 +22,10 @@
+ #include <kern/simple_lock.h>
+ #include <machine/machine_routines.h>
+ #include <libkern/crypto/register_crypto.h>
+-#include <libkern/crypto/rand.h>
++/* (redwood) rand.h is not used here, and it drags in <sys/types.h>: in an osfmk compile
++ * "-I osfmk/libsa" is ahead of the machine headers, so <machine/types.h> resolves to the
++ * 32-bit libsa one and its dev_t/daddr_t/clock_t collide with the ones libsa/string.h
++ * already defined. */
+ #include <corecrypto/cc_priv.h>
+ #include <corecrypto/ccdigest.h>
+ #include <corecrypto/ccdrbg.h>
