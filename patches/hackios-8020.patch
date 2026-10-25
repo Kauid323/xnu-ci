@@ -1906,6 +1906,19 @@ index 28ea44c..9c7a1fe 100644
  		    "only plain data types can be contained (consider using OSValueObject)");
  		return 0; // C++11 does not support void-returning constexpr functions
  	}
+diff --git a/libkern/libkern/crypto/Makefile b/libkern/libkern/crypto/Makefile
+index f5544e8..2bd0007 100644
+--- a/libkern/libkern/crypto/Makefile
++++ b/libkern/libkern/crypto/Makefile
+@@ -8,7 +8,7 @@ include $(MakeInc_def)
+ 
+ DATAFILES = md5.h rand.h sha1.h
+ 
+-PRIVATE_DATAFILES = register_crypto.h sha2.h des.h aes.h aesxts.h rsa.h chacha20poly1305.h
++PRIVATE_DATAFILES = register_crypto.h sha2.h des.h aes.h aesxts.h rsa.h chacha20poly1305.h crypto.h
+ 
+ INSTALL_KF_MI_LIST = ${DATAFILES}
+ 
 diff --git a/makedefs/MakeInc.cmd b/makedefs/MakeInc.cmd
 index c6356a0..8931cd2 100644
 --- a/makedefs/MakeInc.cmd

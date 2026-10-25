@@ -2,13 +2,13 @@
 
 `patches/hackios-8020.patch` is the redwood work rebased from `xnu-8796.121.2` (iOS 16.5) onto
 `xnu-8020.140.41` (iOS 15.3). It applies to a pristine tag with **no fuzz and no rejects**
-(`patch -F0`, 74 files, 190 hunks).
+(`patch -F0`, 75 files, 191 hunks).
 
 The redwood work is two halves, exactly as in `hackios/xnu/apply.sh`:
 
 | | what | where |
 |---|---|---|
-| changes to Apple's files | 190 hunks in 74 files | `patches/hackios-8020.patch` |
+| changes to Apple's files | 191 hunks in 75 files | `patches/hackios-8020.patch` |
 | files Apple's tree does not have | 104 files | `hackios/xnu/files/` (copied by `scripts/fetch-xnu.sh`) |
 
 The patch does **not** carry the 104 new files. `scripts/fetch-xnu.sh` copies them from the
@@ -64,6 +64,7 @@ and `libkern/amfi/miniamfi.c` now compile.
 | `osfmk/arm64/user_exception_trace.c` | `#include <kern/recount.h>` + `recount_task_times()` | `task_info(TASK_ABSOLUTETIME_INFO)` instead; in `patches/redwood-8020.patch` because the file is copied *after* the main patch |
 | `osfmk/ipc/mach_kernelrpc.c` | `goto done` jumps over `typeof(...) info[max_count]`, a variably modified array — C forbids it | `return rv;` at that one site (`rv` is already `MACH_SEND_INVALID_DEST`); Apple's own file, so it is in the main patch |
 | `iokit/Kernel/IOBufferMemoryDescriptor.cpp` | `return NULL;` in a `bool` function; xnu's C++ `stddef.h` defines `NULL` as `nullptr`, which does not convert | `return false;` |
+| `libkern/libkern/crypto/Makefile` | 8020's `EXPORT_MI_LIST` does not carry `crypto.h`, so `<libkern/crypto/crypto.h>` is not in `EXPORT_HDRS` and every kernel compile that reaches `rand.h` from there dies | `crypto.h` added to `PRIVATE_DATAFILES` (which feeds both the install and the export list) |
 | `osfmk/minicrypto/mc_provider.c` | `crypto_digest_alg_t`, `crypto_random_ctx_t`, `CRYPTO_DIGEST_ALG_*`, `CCKPRNG_ENTROPY_SIZE` do not exist in 8020 — iOS 16 added them to `libkern/crypto/{crypto,rand,register_crypto}.h` and to corecrypto | the three headers are **restored from 8796** in `overrides/libkern/libkern/crypto/`; `CCKPRNG_ENTROPY_SIZE` (64) is defined locally in `mc_provider.c` |
 
 The three restored crypto headers deserve a note of their own, because they also close a trap that

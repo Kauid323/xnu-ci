@@ -27,7 +27,7 @@
  */
 /*
  * (redwood) iOS 16 header, restored for 8020: 8796 added crypto_digest_alg_t, the
- * crypto_digest_*/crypto_hmac_* function types and the matching tail of struct
+ * crypto_digest_... and crypto_hmac_... function types and the matching tail of struct
  * crypto_functions, which minicrypto fills in. The struct only grows at the end, so
  * 8020's own users (g_crypto_funcs, IOPlatformExpert) are unaffected.
  */
