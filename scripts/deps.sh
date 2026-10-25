@@ -57,5 +57,10 @@ if [ $rc -ne 0 ]; then
     echo "======== $f (tail)"
     tail -80 "$f"
   done
+  echo "======== what the export left behind"
+  echo "-- BUILD/obj:"; ls "$XNU_SRC/BUILD/obj" 2>/dev/null | head -20
+  echo "-- anything named EXPORT_HDRS:"; find "$XNU_SRC/BUILD" -maxdepth 5 -type d -name 'EXPORT_HDRS' 2>/dev/null | head
+  echo "-- its contents:"; find "$XNU_SRC/BUILD" -maxdepth 7 -type d -path '*EXPORT_HDRS*' 2>/dev/null | head -30
+  echo "-- exporthdrs.log: $(wc -l < hackios/xnu-deps/exporthdrs.log 2>/dev/null) lines"
   exit $rc
 fi
