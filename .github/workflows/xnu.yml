@@ -104,6 +104,21 @@ jobs:
       - name: hackios (xnu-deps + build script)
         run: git clone --depth 1 https://github.com/oosexgang/hackios-xnu-kernel.git hackios
 
+      - name: cache xnu-deps sources
+        uses: actions/cache@v4
+        with:
+          # only what setup.sh fetches and then skips when it is there (a few hundred MB);
+          # host/, sdk/ and build/ are left out so stage 1 and 2 really run every time
+          path: |
+            hackios/xnu-deps/AvailabilityVersions
+            hackios/xnu-deps/libdispatch
+            hackios/xnu-deps/libpthread
+            hackios/xnu-deps/mm_bootstrap_cmds
+            hackios/xnu-deps/tcsh
+            hackios/xnu-deps/unifdef
+            hackios/xnu-deps/MacOSX13.3.sdk
+          key: xnudeps-src-1
+
       - name: xnu source
         run: ./scripts/fetch-xnu.sh "$XNU_TAG" "$PATCH"
 
