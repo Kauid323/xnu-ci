@@ -159,6 +159,7 @@ jobs:
             build.log
             deps.log
             hackios/xnu-deps/exporthdrs.log
+            hackios/xnu-deps/pre-exporthdrs.log
             hackios/xnu-deps/build/**/*.log
           if-no-files-found: warn
 

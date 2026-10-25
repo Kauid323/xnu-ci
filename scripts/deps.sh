@@ -48,11 +48,23 @@ PY
 fi
 
 set +e
+# 8020's exporthdrs needs a first pass to make its object directories and the generated (MIG)
+# headers; setup.sh runs it once and then insists on BUILD/obj/EXPORT_HDRS/osfmk. Do a pass
+# here, and show what it left, so the tree is either complete for setup.sh or visible to us.
+echo "== pre-exporting the kernel headers"
+./hackios/xnu-build.sh -j"$(nproc)" exporthdrs > hackios/xnu-deps/pre-exporthdrs.log 2>&1
+echo "pre-export rc=$?"
+echo "-- BUILD/obj:"; ls "$XNU_SRC/BUILD/obj" 2>/dev/null | head -20
+echo "-- EXPORT_HDRS:"; find "$XNU_SRC/BUILD" -maxdepth 6 -type d -name 'EXPORT_HDRS' 2>/dev/null
+find "$XNU_SRC/BUILD" -maxdepth 7 -type d -path '*EXPORT_HDRS*' 2>/dev/null | head -20
+set -e
+
+set +e
 JOBS=$(nproc) ./hackios/xnu-deps/setup.sh
 rc=$?
 set -e
 if [ $rc -ne 0 ]; then
-  for f in hackios/xnu-deps/exporthdrs.log hackios/xnu-deps/build/pthread/build.log; do
+  for f in hackios/xnu-deps/exporthdrs.log hackios/xnu-deps/pre-exporthdrs.log hackios/xnu-deps/build/pthread/build.log; do
     [ -f "$f" ] || continue
     echo "======== $f (tail)"
     tail -80 "$f"
