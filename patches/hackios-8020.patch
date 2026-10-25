@@ -164,14 +164,15 @@ index a4d25040f38f..aad72993d139 100644
  kern_debug.o_INCFLAGS += -I$(SRCROOT)/osfmk
  
 diff --git a/bsd/conf/files b/bsd/conf/files
-index b21b6ea29c98..d99e29736817 100644
+index b21b6ea29c98..cc280ab4c6a5 100644
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
-@@ -160,6 +160,37 @@ bsd/dev/vn/vn.c				optional vndevice
+@@ -160,6 +160,38 @@ bsd/dev/vn/vn.c				optional vndevice
  bsd/dev/vn/shadow.c			optional vndevice
  
  bsd/dev/monotonic.c optional monotonic
 +bsd/dev/redwood_input.c		standard
++bsd/dev/redwood_mpss.c		standard
 +bsd/dev/redwood_virtio_input.c	standard
 +bsd/dev/redwood_goodix.c	standard
 +bsd/dev/redwood_buttons.c	standard
@@ -205,7 +206,7 @@ index b21b6ea29c98..d99e29736817 100644
  bsd/dev/dev_perfmon.c optional config_perfmon
  
  bsd/libkern/crc16.c			standard
-@@ -208,6 +239,14 @@ bsd/miscfs/devfs/devfs_vfsops.c		optional devfs
+@@ -208,6 +240,14 @@ bsd/miscfs/devfs/devfs_vfsops.c		optional devfs
  bsd/miscfs/mockfs/mockfs_fsnode.c	optional mockfs
  bsd/miscfs/mockfs/mockfs_vfsops.c	optional mockfs
  bsd/miscfs/mockfs/mockfs_vnops.c	optional mockfs
@@ -220,7 +221,7 @@ index b21b6ea29c98..d99e29736817 100644
  
  bsd/miscfs/routefs/routefs_ops.c	optional routefs
  
-@@ -417,6 +456,7 @@ bsd/security/audit/audit_syscalls.c		standard
+@@ -417,6 +457,7 @@ bsd/security/audit/audit_syscalls.c		standard
  bsd/security/audit/audit_worker.c		optional config_audit
  
  bsd/pthread/pthread_shims.c		standard
@@ -228,7 +229,7 @@ index b21b6ea29c98..d99e29736817 100644
  bsd/pthread/pthread_priority.c		standard
  bsd/pthread/pthread_workqueue.c		standard
  
-@@ -438,6 +478,7 @@ bsd/kern/kern_debug.c			standard
+@@ -438,6 +479,7 @@ bsd/kern/kern_debug.c			standard
  bsd/kern/kern_symfile.c			standard
  bsd/kern/kern_descrip.c			standard
  bsd/kern/kern_guarded.c			standard
