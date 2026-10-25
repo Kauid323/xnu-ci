@@ -6,59 +6,55 @@
 
 ## 两个 job
 
-- **rebase**（push 就自动跑，约 2 分钟）：拉目标 XNU、用 `patch -F3` 打 hackios 的补丁，
-  把还打不上的 hunk 列进 job summary，`.rej` 当 artifact 带回来。**不需要工具链**。
-- **build**（手动触发，`build=true`）：装 theos（Linux cctools + `iPhoneOS15.6.sdk`）、
-  跑 hackios 的 `xnu-deps/setup.sh`、`xnu-build.sh`，`out/` 里的 `mach.*` 当 artifact。
+- **rebase**（push 就自动跑，约 2 分钟）：拉目标 XNU、打 `patches/hackios-8020.patch`，
+  把打不上的 hunk 列进 job summary，`.rej` 当 artifact 带回来。**不需要工具链**。
+- **build**（手动触发，`build=true`）：装 theos（Linux cctools + `iPhoneOS16.5.sdk`）、
+  跑 hackios 的 `xnu-deps/setup.sh`、`xnu-build.sh`，`out/` 里的 `mach.*` 当 artifact；
+  `build.log` / `deps.log` 无论如何都会带回来，job summary 里先列前 120 条错误。
 
-## 本地测过的现状（2026-10-25，Windows + MSYS2 git/patch）
+## 现状（2026-10-25）
 
-`patches/hackios-8796.patch` 是 hackios 给 `xnu-8796.121.2`（iOS 16.5）写的 73 个文件的补丁。
-对 `xnu-8020.140.41`：
+`patches/hackios-8020.patch` 已经把 hackios 给 `xnu-8796.121.2`（iOS 16.5）的 185 个 hunk
+移植到 `xnu-8020.140.41`，**在纯净 tag 上 `patch -F0` 零 fuzz、零 `.rej` 通过**（72 个文件）。
+移植记录逐 hunk 写在 [`PORTING.md`](PORTING.md)。
 
-| 打补丁的方式 | 失败 hunk |
-|---|---|
-| `git apply`（零 fuzz） | 34 个 hunk，22 个文件 |
-| `patch -p1 -F3`（3 行 fuzz） | **9 个 hunk** |
+redwood 的工作是两半，缺一半就编不过：
 
-所以剩下要手工移植的是这 9 个 hunk（`patch -F3` 之后还会留 `.rej`），文件名是按补丁里的
-`@@ -行号` 对出来的：
-
-| 文件 | hunk | 作用（都是挂平台层用的钩子） |
+| | 内容 | 位置 |
 |---|---|---|
-| `bsd/kern/kern_exec.c` | #7 @3171 | exec 里的钩子（`exectrace` 就加在这附近） |
-| `bsd/kern/sys_generic.c` | @631、@678 | read/write 的钩子 |
-| `bsd/vm/vm_unix.c` | @2538 | `after_root_check` 附近 |
-| `config/MASTER.arm64.bcm2837` | @16、@50 | 机器配置项（8020 的 config 目录结构变了） |
-| `makedefs/MakeInc.cmd` | @100 | 编译命令（`VERBOSE` 那一段） |
-| `osfmk/conf/files.arm64` | @25 | 新文件登记 |
-| `osfmk/kern/kalloc.h` | @821 | `kt_granule_t` 附近 |
-| `osfmk/kern/percpu.h` | @236 | `other_percpu_base` 附近 |
+| 改 Apple 的文件 | 185 hunk / 72 文件 | `patches/hackios-8020.patch` |
+| Apple 树里没有的新文件 | 104 个 | `hackios/xnu/files/`，由 `scripts/fetch-xnu.sh` 拷进去 |
 
-逐个对照 8796 的写法移植即可；移植完把结果做成 `patches/hackios-8020.patch`。
+补丁**不带**那 104 个新文件（`bsd/dev/redwood_*.c`、`bsd/miscfs/apfs/*`、
+`iokit/Kernel/Mini*.cpp`、`osfmk/arm64/psci_smp.c` …）。`fetch-xnu.sh` 拷完会检查十个关键
+文件在不在，缺了就直接失败，而不是等编译器在 `bsd/conf/files` 上炸。
+
+一个好消息：8020 的 bcm2837 配置本身已经是"可移植"的那一套——
+`ARM_EXTRAS_BASE = [ nos_arm_pmap nos_arm_asm ]` 默认就在 `KERNEL_BASE` 里，
+`config_pmap_ppl` 在 8020 里根本不存在。8796 时代最大的一块改动因此不需要了。
 
 ## 用法
 
 ```bash
 cd D:/redmi6A-uefi/xnu-ci
-git init -q . && git add -A && git commit -m "xnu ci: rebase report + build"
-git remote add origin git@github.com:<你>/xnu-ci.git     # 或 https + token
-git push -u origin main
+git add -A && git commit -m "8020: rebased patch + files/ + build log"
+git push
 ```
 
-推上去后：
-1. Actions 里 `xnu` 会跑 **rebase**，看 summary 里的失败列表和 `rebase-report` artifact；
-2. 把 9 处移植完（在 `patches/` 里生成一份 `hackios-8020.patch`，脚本默认读 `patches/hackios-8796.patch`，
-   改一下 `PATCH` 变量或直接替换文件名）；
-3. 手动 Run workflow，勾 `build=true`，拿 `mach-kernel` artifact。
+推上去后：Actions → `xnu` → Run workflow → 勾 `build=true`。
+第一次大概率在编译期失败（104 个新文件是按 8796 的头文件写的），拿 `build-log` artifact
+里的 `build.log` 逐条改。
 
-## 已知风险（第一次跑 build 时大概率先撞这些）
+## 已知风险
 
 - `setup-theos.sh` 里 toolchain 的下载地址是"猜"的（theos 的 Linux 工具链发布资产名可能不同）；
   脚本先试官方 installer，失败再试 clone + release，最后会 `ls` 出来让人看。
 - `xnu-deps/setup.sh` 会拉 Apple 的几个开源包和 `MacOSX13.3.sdk`（几百 MB），第一次跑慢。
-- `xnu-build.sh` 里 `MACHINE=BCM2837`（hackios 的机器配置）；8020 的 `config/` 里得有这个配置，
-  这也是上面 `config/MASTER.arm64.bcm2837` 那两处 hunk 要移植的原因。
+- SDK 锁在 **16.5**：`xnu-deps/setup.sh` 和 `xnu-env.sh` 都硬编码 16.5，且后者会覆盖我们
+  传的 `XNU_SDK_PATH`。对 8020 的源码没有影响（它只用 `__IPHONE_OS_VERSION_MIN_REQUIRED`
+  跟 iOS 5/6/7/10 比）。
+- `-lpthread_kext` 来自 libpthread **514**（iOS 16.5），8020 自带的是 454。它是拿 8020 自己
+  导出的头文件编的，可能没事；真链不上就把 `xnu-deps/setup.sh` 钉到 454。
 - 编出来的内核是 **iOS 15.3 的 XNU + hackios 平台层**，`mach.development.bcm2837`；
-  它能不能直接喂给现在的 loader，要等第一次 artifact 下来再验（版本/ABI 变了，`loader_return.c`、
+  能不能直接喂给现在的 loader 要等 artifact 下来再验（版本/ABI 变了，`loader_return.c`、
   `psci_smp.c` 这些符号偏移可能变，探针偏移要重算）。

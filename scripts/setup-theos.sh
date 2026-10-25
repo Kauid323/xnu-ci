@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Install theos with its Linux toolchain (cctools/ld64) and one iOS SDK.
-# usage: setup-theos.sh [iPhoneOS15.6.sdk]
+# usage: setup-theos.sh [iPhoneOS16.5.sdk]
 set -euo pipefail
 
-SDK=${1:-iPhoneOS15.6.sdk}
+SDK=${1:-iPhoneOS16.5.sdk}
 THEOS=${THEOS:-$PWD/theos}
 export THEOS
 

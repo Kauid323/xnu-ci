@@ -5,8 +5,8 @@ set -euo pipefail
 
 export THEOS=${THEOS:-$PWD/theos}
 export XNU_SRC=$PWD/src
-export XNU_SDK_PATH="$THEOS/sdks/${XNU_SDK:-iPhoneOS15.6.sdk}"
-export XNU_SDK_VERSION=${XNU_SDK_VERSION:-15.6}
+export XNU_SDK_PATH="$THEOS/sdks/${XNU_SDK:-iPhoneOS16.5.sdk}"
+export XNU_SDK_VERSION=${XNU_SDK_VERSION:-16.5}
 
 echo "XNU_SRC=$XNU_SRC"
 echo "XNU_SDK_PATH=$XNU_SDK_PATH"

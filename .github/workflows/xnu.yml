@@ -22,12 +22,12 @@ on:
         default: 'xnu-8020.140.41'
       sdk:
         description: 'theos SDK directory name'
-        default: 'iPhoneOS15.6.sdk'
+        default: 'iPhoneOS16.5.sdk'
 
 env:
   XNU_TAG: ${{ inputs.xnu_tag || 'xnu-8020.140.41' }}
-  XNU_SDK: ${{ inputs.sdk || 'iPhoneOS15.6.sdk' }}
-  PATCH: patches/hackios-8796.patch
+  XNU_SDK: ${{ inputs.sdk || 'iPhoneOS16.5.sdk' }}
+  PATCH: patches/hackios-8020.patch
 
 jobs:
   rebase:
@@ -101,13 +101,46 @@ jobs:
         run: ./scripts/fetch-xnu.sh "$XNU_TAG" "$PATCH"
 
       - name: xnu-deps
-        run: ./scripts/deps.sh
+        run: |
+          set +e
+          ./scripts/deps.sh 2>&1 | tee deps.log
+          echo "deps=${PIPESTATUS[0]}" >> $GITHUB_ENV
 
       - name: build
-        run: ./scripts/build.sh
+        if: env.deps == '0'
+        run: |
+          set +e
+          ./scripts/build.sh 2>&1 | tee build.log
+          echo "build=${PIPESTATUS[0]}" >> $GITHUB_ENV
+
+      - name: errors
+        if: always()
+        run: |
+          {
+            echo "### deps=${deps:-skipped} build=${build:-skipped}"
+            echo
+            echo '```'
+            grep -nE 'error:|Error [0-9]|No rule to make|fatal error|undefined symbol|ld: ' build.log 2>/dev/null | head -120
+            echo '```'
+            echo
+            echo "**first failing object**"
+            echo '```'
+            grep -nE '\*\*\* \[.*\.o\]' build.log 2>/dev/null | head -5
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
 
       - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-log
+          path: |
+            build.log
+            deps.log
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: mach-kernel
           path: out/
-          if-no-files-found: error
+          if-no-files-found: warn

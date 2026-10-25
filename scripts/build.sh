@@ -4,8 +4,8 @@ set -euo pipefail
 
 export THEOS=${THEOS:-$PWD/theos}
 export XNU_SRC=$PWD/src
-export XNU_SDK_PATH="$THEOS/sdks/${XNU_SDK:-iPhoneOS15.6.sdk}"
-export XNU_SDK_VERSION=${XNU_SDK_VERSION:-15.6}
+export XNU_SDK_PATH="$THEOS/sdks/${XNU_SDK:-iPhoneOS16.5.sdk}"
+export XNU_SDK_VERSION=${XNU_SDK_VERSION:-16.5}
 export MACHINE=${MACHINE:-BCM2837}
 
 JOBS=$(nproc) ./hackios/xnu-build.sh -j"$(nproc)"

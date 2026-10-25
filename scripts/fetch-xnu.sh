@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
-# Fetch an XNU tag and apply our patch to it.
-# usage: fetch-xnu.sh [xnu-8020.140.41] [patches/hackios-8796.patch]
+# Fetch an XNU tag, put the redwood work on top of it, and (when hackios is checked out next to
+# us) the new files that the patch refers to but does not carry.
+#
+# The redwood work is two things, as in hackios/xnu/apply.sh:
+#   redwood.patch  changes to Apple's own files        -> patches/hackios-*.patch
+#   files/         files Apple's tree does not have    -> hackios/xnu/files/
+#
+# usage: fetch-xnu.sh [xnu-8020.140.41] [patches/hackios-8020.patch]
 set -euo pipefail
 
 TAG=${1:-xnu-8020.140.41}
-PATCH=${2:-patches/hackios-8796.patch}
+PATCH=${2:-patches/hackios-8020.patch}
+NEWFILES=${NEWFILES:-hackios/xnu/files}
 
 rm -rf src
 curl -sSL -o xnu.tar.gz "https://codeload.github.com/apple-oss-distributions/xnu/tar.gz/refs/tags/${TAG}"
@@ -24,3 +31,36 @@ if ! git apply --check "../${PATCH}" 2>../apply-check.log; then
 fi
 git apply "../${PATCH}"
 echo "== patch applied"
+
+if [ -d "../${NEWFILES}" ]; then
+  n=$(find "../${NEWFILES}" -type f | wc -l)
+  echo "== copying $n new files from $NEWFILES"
+  cp -a "../${NEWFILES}/." .
+else
+  echo "!! $NEWFILES is missing: the patch refers to files that are not here"
+  echo "   (bsd/dev/redwood_*.c, bsd/miscfs/apfs/*, iokit/Kernel/Mini*.cpp, ...)"
+  exit 1
+fi
+
+# everything the patch and files/ are supposed to provide, checked before the compiler finds out
+echo "== checking the tree is complete"
+missing=0
+while read -r f; do
+  case "$f" in
+    \#*|'') continue ;;
+  esac
+  if [ ! -e "$f" ]; then echo "   missing: $f"; missing=$((missing + 1)); fi
+done <<'EOF'
+bsd/dev/redwood_lx.c
+bsd/dev/redwood_apfs_check.c
+bsd/miscfs/apfs/apfs_vfsops.c
+bsd/miscfs/ramfs/ramfs.c
+bsd/pthread/pthread_kext_static.c
+iokit/Kernel/GenericARMPE.cpp
+osfmk/arm64/generic_arm64_support.c
+osfmk/arm64/psci_smp.c
+osfmk/arm64/loader_return.c
+libkern/amfi/miniamfi.c
+EOF
+[ "$missing" -eq 0 ] || { echo "!! $missing expected file(s) absent"; exit 1; }
+echo "== tree complete"
